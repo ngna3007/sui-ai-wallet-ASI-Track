@@ -46,3 +46,8 @@ dist/
 # Logs
 *.log
 logs/
+
+backend/server.ts.backup
+ptb_registry.csv
+ptb_registry.csv:Zone.Identifier
+backend/tests/
