@@ -39,9 +39,10 @@ Thumbs.db
 dist/
 *.tsbuildinfo
 
-# Documentation (exclude markdown docs except README)
+# Documentation (exclude markdown docs except README and DEPLOYMENT)
 *.md
 !README.md
+!DEPLOYMENT.md
 
 # Logs
 *.log

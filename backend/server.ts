@@ -36,7 +36,7 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-const PORT = process.env.BACKEND_PORT || 3000;
+const PORT = process.env.PORT || process.env.BACKEND_PORT || 3000;
 const SUI_NETWORK = process.env.SUI_NETWORK || 'testnet';
 const DATABASE_URL = process.env.DATABASE_URL;
 
@@ -906,10 +906,10 @@ app.get('/api/user/nfts', async (req, res) => {
   }
 });
 
-app.listen(PORT, () => {
+app.listen(PORT, '0.0.0.0', () => {
   console.log('');
   console.log('✅ Backend running');
-  console.log(`📍 http://localhost:${PORT}`);
+  console.log(`📍 http://0.0.0.0:${PORT}`);
   console.log('');
   console.log('🔧 PTB & Execution:');
   console.log(`   POST /api/create-ptb           ← Universal (semantic search)`);

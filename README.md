@@ -458,40 +458,52 @@ NODE_ENV=development
 
 ## 🚢 Deployment
 
+> **📖 See [DEPLOYMENT.md](./DEPLOYMENT.md) for comprehensive step-by-step deployment guide**
+
 ### Current Setup
 - **Backend**: Railway (auto-deploy from GitHub)
 - **Database**: Neon PostgreSQL (serverless)
-- **Agent**: Agentverse (hosted)
+- **Agent**: Agentverse (hosted with mailbox)
 - **Network**: Sui Testnet
+- **Status**: ✅ All tests passing (8/8 local tests)
+
+### Quick Deploy
+
+1. **Deploy Backend** (Railway/Render/Fly.io):
+   ```bash
+   # See DEPLOYMENT.md for detailed instructions
+   railway up  # or render deploy, or fly deploy
+   ```
+
+2. **Configure Agentverse**:
+   - Copy `suivisor_agent.py` to Agentverse
+   - Add environment variables (BACKEND_URL, API keys)
+   - Enable mailbox and get mailbox key
+   - Deploy agent
+
+3. **Test Integration**:
+   ```bash
+   # Local testing
+   python test_agent_local.py
+
+   # Production testing via ASI:One
+   # Send message to agent address
+   ```
 
 ### Production Checklist
-- [ ] Enable API authentication
-- [ ] Configure rate limiting
-- [ ] Set up Sentry error monitoring
+- [x] Agent code updated to match backend API
+- [x] Local testing completed (8/8 tests passing)
+- [x] Deployment documentation created
+- [ ] Backend deployed to cloud platform
+- [ ] Agentverse agent deployed with mailbox
+- [ ] Environment variables configured
+- [ ] End-to-end testing on Agentverse
+- [ ] Enable API authentication (recommended)
+- [ ] Configure rate limiting (recommended)
+- [ ] Set up monitoring and alerting
 - [ ] Enable database backups
-- [ ] Implement withdrawal limits
-- [ ] Set up alerting for low agent wallet balance
 - [ ] Restrict CORS origins
-- [ ] Use mainnet for production
-- [ ] Secure private key storage
-- [ ] Enable audit logging
-
-### Deployment Commands
-
-```bash
-# Backend (Railway)
-git push origin main
-# Auto-deploys on Railway
-
-# Agent (Agentverse)
-# 1. Log in to agentverse.ai
-# 2. Update agent code
-# 3. Redeploy from dashboard
-
-# Database (Neon)
-# Automatic backups enabled
-# Point-in-time recovery available
-```
+- [ ] Secure API keys rotation policy
 
 ---
 
