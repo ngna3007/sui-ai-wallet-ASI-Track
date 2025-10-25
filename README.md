@@ -1,14 +1,14 @@
-# 🤖 SuiVisor - AI-Powered DeFi Assistant for Sui Blockchain
+# 🤖 SuiVisor - AI-Powered Multi-User Wallet for Sui Blockchain
 
 ![tag:innovationlab](https://img.shields.io/badge/innovationlab-3D8BD3)
 ![tag:hackathon](https://img.shields.io/badge/hackathon-5F43F1)
 ![Python](https://img.shields.io/badge/python-3.11+-blue.svg)
+![TypeScript](https://img.shields.io/badge/TypeScript-5.0+-blue.svg)
 ![uAgents](https://img.shields.io/badge/uAgents-Framework-00D4AA.svg)
-![MeTTa](https://img.shields.io/badge/MeTTa-SingularityNET-5E17EB.svg)
 ![Sui](https://img.shields.io/badge/Sui-Blockchain-4DA2FF.svg)
 ![ASI Alliance](https://img.shields.io/badge/ASI-Alliance-0056FF.svg)
 
-> **The first autonomous AI agent bringing intelligent DeFi operations to the Sui blockchain**
+> **Intelligent multi-user custodial wallet system enabling AI agents to execute real DeFi operations on Sui blockchain**
 
 ---
 
@@ -17,608 +17,673 @@
 ### **Primary Agent (Agentverse)**
 - **Agent Name:** `suivisor`
 - **Agent Address:** `agent1qfn954mwxwcr54g0qdd3f3gypxfhc2kqdqj5pkjx22zpcutr2p7sqzdj2rm`
-- **Wallet Address:** `0x7c10d052a3aacebdfeb3d53cb7c779f7a1897949a52cfa435fb624c0e7ea4a1c`
+- **Test Wallet Address:** `0x7c10d052a3aacebdfeb3d53cb7c779f7a1897949a52cfa435fb624c0e7ea4a1c`
 - **Network:** Sui Testnet
+- **Backend:** Railway-hosted TypeScript backend
 - **ASI:One Compatible:** ✅ Yes
 - **Chat Protocol:** ✅ Enabled
-- **Manifest:** ✅ Published
 - **Real Transactions:** ✅ Live on testnet
 
 ### **How to Interact**
-1. Open [ASI:One](https://asi.one)
-2. Mention: `@suivisor`
-3. Try: "Help me swap 10 SUI to USDC"
+1. Open [ASI:One](https://asi.one) or [Agentverse](https://agentverse.ai)
+2. Send message to agent address
+3. Try commands:
+   - "Check my balance"
+   - "Swap 10 SUI to USDC"
+   - "Mint NFT called 'My Art'"
+   - "Transfer NFT [object_id] to [address]"
 
 ---
 
-## 🌟 Overview
+## 🎯 Overview
 
-**SuiVisor** is a revolutionary multi-agent AI system that brings autonomous intelligence to DeFi portfolio management on the Sui blockchain. Unlike traditional single-agent wallets, SuiVisor employs four specialized AI agents that collaborate, reason, and execute real blockchain transactions - all accessible through natural language via ASI:One.
+**SuiVisor** is a production-ready multi-user custodial wallet system that enables Fetch.ai agents to execute real blockchain transactions on Sui. Built for the ASI Alliance Hackathon, it bridges AI agent communication with DeFi operations through a hybrid architecture.
 
-**Tagline:** *Your AI team managing your crypto portfolio - powered by ASI Alliance*
+### What Makes SuiVisor Special?
 
-### Why SuiVisor?
+- **🔐 Multi-User Custodial Architecture**: Each agent gets unique deposit address, single backend manages all transactions
+- **💱 Real DeFi Operations**: Live token swaps via Cetus DEX, NFT minting/transfers on Sui testnet
+- **🤖 AI-Powered**: Natural language processing with Claude, semantic PTB template matching
+- **⚡ Gas Abstraction**: Users never need private keys or gas tokens
+- **🛡️ Database-Tracked Ownership**: PostgreSQL ensures per-user balance and NFT tracking
+- **📦 PTB Registry**: Extensible template library for programmable transactions
 
-- **💱 Real DeFi Operations**: Actual token swaps, transfers, and staking on Sui blockchain
-- **🧠 Multi-Agent Intelligence**: Specialized agents work together like a professional team
-- **🛡️ Safety First**: MeTTa knowledge graph ensures every transaction is validated
-- **💬 Natural Language**: Just chat normally - no complex commands needed
-- **🔗 Cross-Platform**: Discoverable on ASI:One, executable on Sui
+### Key Capabilities
 
-
----
-
-## 🎯 Use Cases
-
-1. **Token Swapping**: "Swap 10 SUI to USDC with 1% slippage"
-   - Market agent checks prices
-   - Risk agent validates safety
-   - Executor performs swap
-
-2. **Portfolio Monitoring**: "What's the price of SUI?"
-   - Get real-time market data from CoinMarketCap
-   - 24h price changes and volume
-
-3. **Safe Transfers**: "Transfer 5 USDC to 0x..."
-   - Address validation
-   - Risk assessment
-   - Secure execution
-
-4. **Smart Staking**: "Stake 50 SUI tokens"
-   - Check staking rewards
-   - Validate validator
-   - Execute staking transaction
-
-5. **Risk Analysis**: "Is it safe to swap 100 SUI to USDC?"
-   - MeTTa knowledge base reasoning
-   - Structured safety rules
-   - Clear recommendations
-
+✅ **Token Swaps** - Cetus DEX integration with automatic pool discovery
+✅ **NFT Management** - Mint custom NFTs, transfer with ownership verification
+✅ **Balance Tracking** - Real-time per-user balances with automatic sweeping
+✅ **Transaction History** - Complete audit trail per user
+✅ **Semantic Search** - AI-powered transaction template matching
+✅ **Natural Language** - Chat with agents in plain English
 
 ---
 
-## 🔐 Transaction Signing Architecture
+## 🏗️ Architecture
 
-### **Agent Custodial Pattern** (Official Fetch.ai Standard)
+### Multi-User Wallet System (Option 3 Hybrid)
 
-SuiVisor follows the **official Fetch.ai agent pattern** for blockchain transaction execution:
+SuiVisor implements a hybrid custodial architecture optimized for AI agents:
 
 ```
-User (ASI:One) → Agent (parses intent) → Agent Wallet (signs) → Sui Blockchain (executes)
-```
-
-**How It Works:**
-1. 🎯 **User sends intent** via ASI:One: "Transfer 5 SUI to Alice"
-2. 🤖 **Agent processes** with semantic search + risk analysis
-3. 🔐 **Agent signs** transaction with its own private key (Fetch.ai pattern)
-4. ⛓️ **Blockchain executes** real on-chain transaction
-5. ✅ **User receives** transaction hash + Sui Explorer link
-
-**Why Agent Custodial?**
-- ✅ **Fetch.ai Standard:** All on-chain agents (Solana, BNB, ETH) use this pattern
-- ✅ **Seamless UX:** No manual wallet prompts - true AI automation
-- ✅ **Cross-Chain:** Works with any blockchain (Sui not in ASI Alliance Wallet)
-- ✅ **Secure:** Private keys in encrypted environment, cryptographically secured
-
-**Verified Transactions:**
-- ✅ Transaction 1: [FSLiWBnsE5v9p79...](https://suiscan.xyz/testnet/tx/FSLiWBnsE5v9p79Pavy8QZyQtpRRimXpLj312YHzbbmz)
-- ✅ Transaction 2: [9zdPZrijQhK8Jzf...](https://suiscan.xyz/testnet/tx/9zdPZrijQhK8Jzf3StRj9ACEYrRJ5CDvUNVmfqajrwE2)
-- ✅ Agent Wallet: [0x7c10d052...](https://suiscan.xyz/testnet/account/0x7c10d052a3aacebdfeb3d53cb7c779f7a1897949a52cfa435fb624c0e7ea4a1c)
-
-**For Production:** This pattern works for demos and small amounts. Production systems would add:
-- Multi-sig wallet security
-- User deposit/withdrawal system
-- Transaction limits and approval workflows
-- Insurance/auditing mechanisms
-
-**Reference:** This matches [Fetch.ai's official on-chain agent documentation](https://innovationlab.fetch.ai/resources/docs/examples/on-chain-examples/on-chain-agents) where "agents handle private keys in a secure environment" and sign transactions autonomously.
-
----
-
-## 🏗️ System Architecture
-
-```
-┌──────────────────────────────────────────────────────────────┐
-│                         ASI:One                               │
-│                  (Natural Language Interface)                 │
-└───────────────────────────┬──────────────────────────────────┘
-                            │ Chat Protocol
+┌─────────────────────────────────────────────────────────────┐
+│ User (Fetch.ai Agent)                                       │
+│ Address: agent1qw3k5l2m8p9r7s6t4u5v6...                     │
+│                                                              │
+│ ┌──────────────────────────────────────────────────────┐   │
+│ │ User's Deposit Address (Deterministic)               │   │
+│ │ 0xabcd1234... (derived from agent address)           │   │
+│ │ - Receives deposits from external sources            │   │
+│ │ - Auto-swept to agent wallet                         │   │
+│ └──────────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────┘
+                            │
+                            │ deposits detected & swept
                             ▼
-┌─────────────────────────────────────────────────────────────────┐
-│          📊 Sui Assistant Coordinator Agent                          │
-│          (Coordinator & Decision Maker)                         │
-│          Address: agent1q...                                     │
-└────────┬────────────────────┬────────────────────┬─────────────┘
-         │                    │                    │
-    ┌────▼────┐         ┌────▼────┐         ┌────▼────┐
-    │ 💰      │         │ 🛡️      │         │ ⚙️       │
-    │ Market  │         │  Risk   │         │ Trans   │
-    │ Intel   │         │ Analyzer│         │ Executor│
-    │         │         │         │         │         │
-    │agent1q..│         │agent1q..│         │agent1q..│
-    └────┬────┘         └────┬────┘         └────┬────┘
-         │                   │                    │
-         │              ┌────▼────┐               │
-         │              │ MeTTa   │               │
-         │              │Knowledge│               │
-         │              │  Base   │               │
-         │              └─────────┘               │
-         │                                        │
-         ▼                                        ▼
-    CoinMarketCap                         Sui Blockchain
-        API                               (Real Transactions)
+┌─────────────────────────────────────────────────────────────┐
+│ Agent Wallet (Custodial)                                    │
+│ 0x7c10a9b8fc5d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6a7b8c9d0e1f2   │
+│                                                              │
+│ - Holds ALL assets on-chain                                 │
+│ - Executes transactions for all users                       │
+│ - Pays gas fees                                             │
+│ - Managed by backend service                                │
+└─────────────────────────────────────────────────────────────┘
+                            │
+                            │ ownership tracked in DB
+                            ▼
+┌─────────────────────────────────────────────────────────────┐
+│ Database (PostgreSQL - Neon)                                │
+│                                                              │
+│ user_accounts:                                              │
+│   - agent1qw3k... → balance: 100 SUI                        │
+│   - agent1qx5n... → balance: 50 SUI                         │
+│                                                              │
+│ user_nfts:                                                  │
+│   - agent1qw3k... → NFT_123 (status: owned)                 │
+│   - agent1qx5n... → NFT_456 (status: transferred)           │
+└─────────────────────────────────────────────────────────────┘
 ```
 
-### Agent Responsibilities
+### How It Works
 
-| Agent | Role | Key Technologies |
-|-------|------|------------------|
-| **Sui Assistant Coordinator** | User interface, intent parsing, orchestration | uAgents, Chat Protocol, ASI:One LLM |
-| **Market Intelligence** | Price data, market analysis | CoinMarketCap API, uAgents |
-| **Risk Analyzer** | Safety validation, risk scoring | **MeTTa Knowledge Graph**, uAgents |
-| **Transaction Executor** | Blockchain execution | Sui SDK, PTB, uAgents |
+**1. User Deposits**
+```
+Agent sends 100 SUI → deposit_address (0xabcd...)
+  ↓
+Backend detects deposit via polling
+  ↓
+Sweep: deposit_address → agent_wallet
+  ↓
+Database: user_accounts.balance += 100 SUI
+```
 
+**2. User Requests Swap**
+```
+Agent message: "swap 10 SUI to USDC"
+  ↓
+Python Agent → Backend API: POST /api/swap
+  ↓
+Backend verifies: user has ≥10 SUI
+  ↓
+Agent wallet executes swap on Cetus
+  ↓
+Database updated: balance adjusted
+  ↓
+Transaction hash returned
+```
+
+**3. User Mints NFT**
+```
+Agent message: "mint NFT 'My Art'"
+  ↓
+Backend: agent_wallet mints NFT
+  ↓
+NFT owned by agent_wallet on-chain
+  ↓
+Database: user_nfts tracks ownership
+  ↓
+User can query/transfer NFT anytime
+```
+
+### Three Wallet Types
+
+1. **User's Fetch.ai Address** (`agent1q...`)
+   - User's identity in ASI ecosystem
+   - Never needs private key
+
+2. **User's Deposit Address** (`0xabcd...`)
+   - Deterministically derived from agent address
+   - Receives external deposits
+   - Auto-swept to custodial wallet
+
+3. **Agent's Custodial Wallet** (`0x7c10...`)
+   - Single wallet executing all transactions
+   - Holds all assets on-chain
+   - Pays all gas fees
 
 ---
 
-## 🚀 Agent Details
+## 🚀 Features
 
-### 1. Sui Assistant Coordinator Agent
+### ✅ Core Wallet Operations
+- **Multi-User Management**: Isolated balances per agent
+- **Deterministic Addresses**: Each agent gets unique deposit address
+- **Automatic Sweeping**: Deposits auto-transferred to custodial wallet
+- **Balance Tracking**: Real-time updates via database
+- **Transaction History**: Complete audit trail per user
 
-**Address**: `[Will be populated after Agentverse deployment]`
+### ✅ DeFi Capabilities
+- **Token Swaps**: Cetus DEX with automatic pool discovery
+- **Slippage Control**: Configurable slippage tolerance
+- **Multi-Token Support**: SUI, USDC, and more
+- **NFT Minting**: Custom NFTs with metadata
+- **NFT Transfers**: Verified ownership transfers
+- **Gas Abstraction**: Zero gas costs for users
 
-**Capabilities**:
-- Natural language understanding via ASI:One
-- Multi-agent coordination
-- Decision making and approval
-- User-friendly responses
+### ✅ AI Integration
+- **Semantic Search**: Vector embeddings (Voyage AI) for PTB template matching
+- **LLM Extraction**: Claude-powered parameter extraction from natural language
+- **PTB Registry**: Extensible template library
+- **Natural Language**: Plain English commands
+- **Context Awareness**: Maintains conversation state
 
-**Input Data Model**:
-```python
-{
-  "query": "string",  # Natural language user query
-}
-```
-
-**Output Data Model**:
-```python
-{
-  "response": "string",        # Human-readable response
-  "transaction_hash": "string", # If transaction executed
-  "status": "success|failure"
-}
-```
-
-**Chat Protocol**: ✅ Enabled for ASI:One discovery
-
----
-
-### 2. Market Intelligence Agent
-
-**Address**: `[Will be populated after Agentverse deployment]`
-
-**Capabilities**:
-- Real-time token price queries
-- 24h price change tracking
-- Volume and market cap data
-- Price alerts (coming soon)
-
-**Input Data Model**:
-```python
-{
-  "token_symbol": "SUI|USDC|USDT",
-  "quote_currency": "USD"
-}
-```
-
-**Output Data Model**:
-```python
-{
-  "token_symbol": "string",
-  "price": float,
-  "change_24h": float,
-  "volume_24h": float,
-  "timestamp": "ISO8601"
-}
-```
+### ✅ Production Ready
+- **Error Handling**: Comprehensive logging and recovery
+- **Database Transactions**: ACID compliance with Drizzle ORM
+- **Health Monitoring**: Health check endpoints
+- **Testing**: 11/11 endpoint tests passing
+- **Security**: Input validation, SQL injection protection
 
 ---
 
-### 3. Risk Analyzer Agent ⭐ **MeTTa Powered**
+## 📊 Tech Stack
 
-**Address**: `[Will be populated after Agentverse deployment]`
+### Backend (TypeScript)
+- **Runtime**: Node.js with Express
+- **Blockchain**: Sui SDK (@mysten/sui)
+- **Database**: PostgreSQL (Neon) with Drizzle ORM
+- **AI Services**:
+  - Anthropic Claude (parameter extraction)
+  - Voyage AI (semantic embeddings)
+- **DeFi**: Cetus SDK for DEX operations
+- **Deployment**: Railway (backend), Neon (database)
 
-**Capabilities**:
-- **MeTTa knowledge graph reasoning**
-- Structured safety rules validation
-- Address format checking
-- Gas limit verification
-- Slippage tolerance assessment
-- Risk scoring (0.0 - 1.0)
+### Agent (Python)
+- **Framework**: Fetch.ai uAgents
+- **Communication**: HTTPS to backend API
+- **Platform**: Agentverse (hosted agents)
+- **Integration**: ASI:One chat interface
 
-**Input Data Model**:
-```python
-{
-  "transaction_type": "swap|transfer|stake",
-  "from_token": "string",
-  "to_token": "string",
-  "amount": float,
-  "slippage_tolerance": float,
-  "estimated_gas": float
-}
-```
-
-**Output Data Model**:
-```python
-{
-  "risk_level": "low|medium|high|critical",
-  "is_safe": boolean,
-  "warnings": ["string"],
-  "recommendations": ["string"],
-  "confidence_score": float,
-  "reasoning": "string"  # MeTTa-based explanation
-}
-```
-
-**MeTTa Knowledge Base**: Contains 50+ safety rules for DeFi operations
+### Infrastructure
+- **Database**: Neon PostgreSQL (serverless)
+- **Hosting**: Railway (auto-deploy from GitHub)
+- **Network**: Sui Testnet
+- **Monitoring**: Health checks, error logging
 
 ---
 
-### 4. Transaction Executor Agent
+## 🛠️ Project Structure
 
-**Address**: `[Will be populated after Agentverse deployment]`
-
-**Capabilities**:
-- Token swap execution
-- Token transfers
-- Staking operations
-- Gas optimization
-
-**Input Data Model (Swap)**:
-```python
-{
-  "from_token": "string",
-  "to_token": "string",
-  "amount": float,
-  "slippage_tolerance": float,
-  "wallet_address": "string"
-}
+```
+suivisor/
+├── backend/                          # TypeScript backend service
+│   ├── server.ts                     # Express API server
+│   ├── lib/
+│   │   ├── services/
+│   │   │   ├── sui-client.ts         # Sui blockchain client
+│   │   │   ├── sui-signer.ts         # Transaction signing
+│   │   │   ├── ptb-service.ts        # Semantic search
+│   │   │   └── embeddings.ts         # Voyage AI embeddings
+│   │   ├── tools/
+│   │   │   ├── cetus-pool-discovery.ts
+│   │   │   ├── coin-info-discovery.ts
+│   │   │   └── get-sui-wallet-*.ts
+│   │   └── helpers/
+│   │       └── deposit-address.ts    # Address derivation
+│   ├── db/
+│   │   ├── drizzle-client.ts
+│   │   ├── drizzle-schema.ts         # Database schema
+│   │   └── migrations/
+│   └── tests/
+│       ├── test-all-endpoints.ts     # 11 endpoint tests
+│       ├── test-nft-flow.ts          # NFT lifecycle
+│       └── test-swap.ts              # Swap functionality
+│
+├── agent/                            # Python Fetch.ai agent
+│   └── main.py                       # Agent implementation
+│
+└── README.md                         # This file
 ```
 
-**Output Data Model**:
-```python
-{
-  "status": "success|failure|error",
-  "transaction_hash": "string",
-  "transaction_type": "string",
-  "amount": float,
-  "gas_used": float,
-  "error_message": "string|null",
-  "timestamp": "ISO8601"
-}
-```
+## 💾 Database Schema
 
+### `user_accounts`
+- `user_address` (agent1q...) - Fetch.ai agent address
+- `deposit_address` (0x...) - Derived Sui address
+- `balance` - Current SUI balance
+- `balance_last_updated` - Last sweep timestamp
 
----
+### `user_nfts`
+- `user_address` - Owner's agent address
+- `nft_object_id` - Sui NFT object ID
+- `status` - owned | transferred | burned
+- `mint_tx_digest` - Minting transaction
+- `transfer_tx_digest` - Transfer transaction (if any)
+- `recipient_address` - Transfer recipient (if any)
 
-## 🛠️ Installation & Setup
+### `user_transactions`
+- `user_address` - Transaction initiator
+- `tx_hash` - Sui transaction hash
+- `tx_type` - deposit | swap | mint_nft | transfer_nft
+- `amount` - Transaction amount (if applicable)
+- `status` - pending | success | failed
 
-### Prerequisites
-
-- Python 3.8+
-- Node.js 16+ (for backend)
-- Git
-
-### Step 1: Clone Repository
-
-```bash
-git clone https://github.com/CommandOSSLabs/sui-ai-wallet.git
-cd sui-ai-wallet/ASI\ Agent\ Track/suivisor
-```
-
-### Step 2: Install Python Dependencies
-
-```bash
-# Create virtual environment
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-
-# Install dependencies
-pip install -r requirements.txt
-```
-
-### Step 3: Configure Environment
-
-```bash
-# Copy example environment file
-cp .env.example .env
-
-# Edit .env and add:
-# - COINMARKETCAP_API_KEY
-# - Agent seeds (for deployment)
-# - Backend API URL (if different from localhost)
-```
-
-### Step 4: Install MeTTa (Required for Risk Analyzer)
-
-```bash
-pip install hyperon
-```
-
-### Step 5: Start Backend (Optional - for full functionality)
-
-```bash
-# In parent directory
-cd ../../
-npm install
-npm run dev
-```
-
-
----
-
-## 🏃 Running Agents
-
-### Local Development
-
-Run each agent in a separate terminal:
-
-```bash
-# Terminal 1: Sui Assistant Coordinator
-cd agents/portfolio_supervisor
-python agent.py
-
-# Terminal 2: Market Intelligence
-cd agents/market_intelligence
-python agent.py
-
-# Terminal 3: Risk Analyzer
-cd agents/risk_analyzer
-python agent.py
-
-# Terminal 4: Transaction Executor
-cd agents/transaction_executor
-python agent.py
-```
-
-### Agentverse Deployment
-
-See [DEPLOYMENT.md](./DEPLOYMENT.md) for detailed instructions on deploying to Agentverse with Mailbox.
-
+### `ptb_registry`
+- `name` - Template identifier (@commandoss/mint-nft)
+- `typescriptCode` - Executable PTB code
+- `inputSchema` - Required parameters (JSON schema)
+- `embedding` - Vector embedding for semantic search
+- `supportingTools` - Required helper functions
 
 ---
 
 ## 🧪 Testing
 
-### Test Market Agent
+### Comprehensive Test Suite (11/11 Passing)
 
-```python
-from uagents import Agent, Context
-from shared.models import PriceRequest
-
-# Send price request
-await ctx.send(MARKET_AGENT_ADDRESS, PriceRequest(
-    token_symbol="SUI",
-    quote_currency="USD"
-))
+```bash
+cd backend
+npm run test:all
 ```
 
-### Test Risk Agent
+**Test Coverage:**
+✅ Health check
+✅ Get user balance (new user)
+✅ Get user balance (existing)
+✅ List templates
+✅ Get template by name
+✅ Swap SUI → USDC
+✅ Mint NFT
+✅ Get user's owned NFTs
+✅ Transfer NFT
+✅ Verify NFT marked as transferred
+✅ Get transaction history
 
-```python
-from shared.models import RiskCheckRequest, TransactionType
-
-# Send risk check
-await ctx.send(RISK_AGENT_ADDRESS, RiskCheckRequest(
-    transaction_type=TransactionType.SWAP,
-    from_token="SUI",
-    to_token="USDC",
-    amount=10.0,
-    slippage_tolerance=0.01
-))
+### NFT Flow Test (5 Steps)
+```bash
+npm run test:nft
 ```
 
+✅ Step 1: Mint NFT and record in database
+✅ Step 2: Verify ownership in database
+✅ Step 3: Transfer NFT on-chain
+✅ Step 4: Mark as transferred in database
+✅ Step 5: Remove from owned list
+
+### Swap Test
+```bash
+npm run test:swap
+```
+
+Validates Cetus pool discovery and swap execution.
 
 ---
 
-## 📚 Technologies Used
+## 🚀 Quick Start
 
-### ASI Alliance Technologies ⭐
+### Prerequisites
+- Node.js 18+
+- Python 3.11+
+- PostgreSQL database (Neon recommended)
+- Sui wallet with testnet SUI
 
-- **Fetch.ai uAgents Framework** (0.21.1+)
-  - Agent creation and communication
-  - Protocol definitions
-  - Agentverse integration
+### Backend Setup
 
-- **Chat Protocol**
-  - ASI:One compatibility
-  - Natural language interface
-  - Message acknowledgements
+```bash
+cd backend
 
-- **SingularityNET MeTTa** ⭐⭐⭐
-  - Knowledge graph reasoning
-  - Structured safety rules
-  - Symbolic logic processing
+# Install dependencies
+npm install
 
-### Blockchain
+# Configure environment
+cp .env.example .env
+# Edit .env with your credentials:
+# - DATABASE_URL (PostgreSQL)
+# - AGENT_PRIVATE_KEY (Sui wallet)
+# - ANTHROPIC_API_KEY
+# - VOYAGE_API_KEY
 
-- **Sui Blockchain** (Testnet/Mainnet)
-  - Programmable Transaction Blocks (PTB)
-  - Token swaps via DEXs
-  - Staking operations
+# Run migrations
+npm run db:push
 
-### APIs & Services
+# Start development server
+npm run dev
 
-- **CoinMarketCap API** - Real-time price data
-- **ASI:One LLM** - Intent parsing and structured output
-- **Next.js Backend** - Transaction execution layer
+# Server runs on http://localhost:3000
+```
 
+### Agent Setup
 
----
+```bash
+cd agent
 
-## 🎓 Innovation & Creativity
+# Install dependencies
+pip install uagents httpx
 
-### What Makes SuiVisor Unique?
+# Configure agent
+export BACKEND_URL="http://localhost:3000"
 
-1. **First Multi-Agent Sui Wallet** on ASI Alliance
-   - No other project combines Sui blockchain with ASI agents
-   - Novel architecture for DeFi operations
+# Run agent locally
+python main.py
 
-2. **MeTTa for Financial Safety**
-   - Industry-first use of symbolic reasoning for DeFi risk
-   - Deterministic, explainable safety decisions
+# Or deploy to Agentverse
+# 1. Go to agentverse.ai
+# 2. Create new agent
+# 3. Upload main.py
+# 4. Set environment variables
+# 5. Deploy
+```
 
-3. **Production-Ready DeFi**
-   - Not a demo - actual working transactions
-   - Battle-tested backend integration
+### Testing
 
-4. **Agent Specialization**
-   - Each agent is expert in its domain
-   - Mimics professional financial team structure
+```bash
+# Run all tests
+npm run test:all
 
-
----
-
-## 🌍 Real-World Impact
-
-### Problem Solved
-
-DeFi is complex and risky. Users face:
-- ❌ Complicated swap interfaces
-- ❌ No safety guidance
-- ❌ Risk of losing funds
-- ❌ Steep learning curve
-
-### SuiVisor Solution
-
-- ✅ Natural language interface
-- ✅ Built-in safety validation
-- ✅ Expert agent team
-- ✅ Beginner-friendly
-
-### Target Users
-
-1. **Crypto Newcomers** - Simple, guided experience
-2. **DeFi Traders** - Fast, safe execution
-3. **Portfolio Managers** - Multi-account oversight
-4. **Risk-Averse Investors** - Peace of mind
-
+# Test specific flows
+npm run test:nft
+npm run test:swap
+```
 
 ---
 
-## 📊 Performance & Metrics
+## 📖 Environment Variables
 
-- **Agents**: 4 specialized agents
-- **Protocols**: 5 custom protocols
-- **MeTTa Rules**: 50+ safety rules
-- **Response Time**: < 2s for price queries
-- **Transaction Success Rate**: 99%+ (inherited from backend)
+Required in `backend/.env`:
 
+```bash
+# Database
+DATABASE_URL=postgresql://user:pass@host/db?sslmode=require
 
----
+# Sui Network
+SUI_NETWORK=testnet
+SUI_RPC_URL=https://fullnode.testnet.sui.io:443
+AGENT_PRIVATE_KEY=suiprivkey1q...
 
-## 🔐 Security & Safety
+# AI Services
+ANTHROPIC_API_KEY=sk-ant-...
+VOYAGE_API_KEY=pa-...
 
-### Multi-Layer Protection
-
-1. **Input Validation** - All parameters checked
-2. **MeTTa Rules** - Symbolic safety reasoning
-3. **Address Verification** - Format and checksum validation
-4. **Gas Limits** - Prevent excessive costs
-5. **Slippage Controls** - Protect against price manipulation
-
-
----
-
-## 🚧 Limitations & Future Work
-
-### Current Limitations
-
-- Single wallet support (multi-sig coming)
-- Limited to Sui blockchain (cross-chain planned)
-- Manual validator selection for staking
-- English language only
-
-### Roadmap
-
-- [ ] Multi-signature wallet support
-- [ ] Cross-chain swaps (Sui ↔ Ethereum)
-- [ ] Advanced portfolio analytics
-- [ ] AI-powered yield optimization
-- [ ] Mobile app with push notifications
-
+# Server
+BACKEND_URL=http://localhost:3000
+BACKEND_PORT=3000
+NODE_ENV=development
+```
 
 ---
 
-## 🤝 Contributing
+## 📈 Performance
 
-We welcome contributions! See [CONTRIBUTING.md](./CONTRIBUTING.md) for guidelines.
-
-
----
-
-## 📄 License
-
-MIT License - See [LICENSE](./LICENSE) for details.
-
+- **Balance Query**: ~50-100ms (database lookup)
+- **Swap Execution**: ~2-3s (on-chain transaction + confirmation)
+- **NFT Minting**: ~2-3s (on-chain transaction)
+- **Semantic Search**: ~100-200ms (with embedding cache)
+- **LLM Extraction**: ~300-500ms (Claude API call)
+- **Total Request**: ~450-1000ms (excluding blockchain confirmation)
 
 ---
 
-## 📞 Contact & Support
+## 🔐 Security
 
-- **GitHub**: https://github.com/CommandOSSLabs/sui-ai-wallet
-- **Discord**: [Join ASI Alliance Discord](https://discord.gg/asi-alliance)
-- **Email**: support@suivisor.ai (demo purposes)
+### ✅ Implemented
+- Input validation on all endpoints
+- SQL injection protection (parameterized queries)
+- Balance verification before transactions
+- NFT ownership verification before transfers
+- Transaction atomicity with database transactions
+- Error handling and logging
 
-
----
-
-## 🏆 ASI Alliance Bounty Submission
-
-### Judging Criteria Checklist
-
-- [x] **Functionality** (25%): Agents work, communicate, and execute real transactions
-- [x] **ASI Tech Use** (20%): uAgents + Agentverse + Chat Protocol + MeTTa
-- [x] **Innovation** (20%): First multi-agent Sui DeFi wallet on ASI Alliance
-- [x] **Real-World Impact** (20%): Solves actual DeFi complexity problem
-- [x] **UX/Presentation** (15%): Clear docs, demo video, comprehensive README
-
-### Technologies Used
-
-✅ **Fetch.ai**: uAgents framework, Agentverse, Chat Protocol
-✅ **SingularityNET**: MeTTa knowledge graph
-✅ **Multi-Agent**: 4 specialized agents with inter-agent communication
-✅ **Natural Language**: ASI:One LLM integration
-✅ **Real Blockchain**: Sui network integration
-
+### ⚠️ Production Requirements
+- **API Authentication**: JWT or API key authentication
+- **Rate Limiting**: Prevent abuse of expensive operations
+- **Key Management**: Use AWS KMS or HashiCorp Vault
+- **Database Encryption**: Encrypt sensitive data at rest
+- **Audit Logging**: Log all financial operations
+- **Withdrawal Limits**: Daily/hourly caps
+- **Multi-Sig**: For large withdrawals
+- **Monitoring**: Real-time alerts for suspicious activity
 
 ---
 
-## 📹 Demo Video
+## 🚢 Deployment
 
-🎥 **Coming Soon**: 3-5 minute demonstration video
+### Current Setup
+- **Backend**: Railway (auto-deploy from GitHub)
+- **Database**: Neon PostgreSQL (serverless)
+- **Agent**: Agentverse (hosted)
+- **Network**: Sui Testnet
 
-**Contents**:
-1. Natural language interaction via ASI:One
-2. Multi-agent collaboration in action
-3. Real token swap on Sui blockchain
-4. MeTTa safety validation
-5. System architecture overview
+### Production Checklist
+- [ ] Enable API authentication
+- [ ] Configure rate limiting
+- [ ] Set up Sentry error monitoring
+- [ ] Enable database backups
+- [ ] Implement withdrawal limits
+- [ ] Set up alerting for low agent wallet balance
+- [ ] Restrict CORS origins
+- [ ] Use mainnet for production
+- [ ] Secure private key storage
+- [ ] Enable audit logging
 
+### Deployment Commands
+
+```bash
+# Backend (Railway)
+git push origin main
+# Auto-deploys on Railway
+
+# Agent (Agentverse)
+# 1. Log in to agentverse.ai
+# 2. Update agent code
+# 3. Redeploy from dashboard
+
+# Database (Neon)
+# Automatic backups enabled
+# Point-in-time recovery available
+```
 
 ---
 
-## 🙏 Acknowledgments
+## 🧩 Integration Examples
 
-- **Fetch.ai** for the uAgents framework
-- **SingularityNET** for MeTTa knowledge graph
-- **Sui Foundation** for blockchain infrastructure
-- **CoinMarketCap** for market data API
-- **ASI Alliance** for the hackathon opportunity
+### Python Agent (Fetch.ai)
 
+```python
+import httpx
+from uagents import Agent, Context, Model
+
+class SwapRequest(Model):
+    from_coin: str
+    to_coin: str
+    amount: float
+
+class SwapResponse(Model):
+    tx_hash: str
+    explorer_url: str
+
+wallet_agent = Agent(name="wallet_agent", seed="your_seed")
+
+@wallet_agent.on_message(model=SwapRequest)
+async def handle_swap(ctx: Context, sender: str, msg: SwapRequest):
+    """Execute token swap for user"""
+
+    response = await httpx.post(
+        "http://localhost:3000/api/swap",
+        json={
+            "userAddress": sender,  # agent1q...
+            "fromCoin": msg.from_coin,
+            "toCoin": msg.to_coin,
+            "amount": msg.amount,
+            "slippage": 0.01
+        },
+        timeout=30.0
+    )
+
+    data = response.json()
+
+    if data["success"]:
+        await ctx.send(
+            sender,
+            SwapResponse(
+                tx_hash=data["transactionHash"],
+                explorer_url=data["explorerUrl"]
+            )
+        )
+    else:
+        await ctx.send(sender, f"Error: {data['error']}")
+```
+
+### JavaScript/TypeScript Client
+
+```typescript
+import axios from 'axios';
+
+const BACKEND_URL = 'http://localhost:3000';
+
+async function mintNFT(userAddress: string, name: string, description: string, imageUrl: string) {
+  const response = await axios.post(`${BACKEND_URL}/api/mint-nft`, {
+    userAddress,
+    name,
+    description,
+    imageUrl
+  });
+
+  if (response.data.success) {
+    console.log(`NFT minted: ${response.data.nftObjectId}`);
+    console.log(`Explorer: ${response.data.explorerUrl}`);
+    return response.data.nftObjectId;
+  } else {
+    throw new Error(response.data.error);
+  }
+}
+
+// Usage
+await mintNFT(
+  'agent1qw3k5l2m8p9r7s6t4u5v6...',
+  'My NFT',
+  'Digital artwork',
+  'https://example.com/nft.png'
+);
+```
 
 ---
 
-**Built with ❤️ for the ASI Alliance Hackathon**
+## 🐛 Troubleshooting
 
-*Empowering everyone to manage crypto safely with AI agents*
+### Error: "Insufficient balance"
+- Check balance: `GET /api/user/balance?userAddress=...`
+- Verify deposits swept to agent wallet
+- Ensure agent wallet has testnet SUI
+
+### Error: "NFT not found or not owned"
+- Query NFTs: `GET /api/user/nfts?userAddress=...`
+- Verify NFT hasn't been transferred
+- Check NFT status in database
+
+### Error: "Pool not found"
+- Verify token symbols (case-sensitive)
+- Check Cetus pool exists for token pair
+- Try common pairs first (SUI/USDC)
+
+### Error: "Database connection failed"
+- Verify `DATABASE_URL` is correct
+- Check database is accessible
+- Ensure SSL mode matches requirements
+
+### Backend Not Starting
+```bash
+# Check if port 3000 is in use
+lsof -ti:3000 | xargs kill -9
+
+# Restart with logs
+npm run dev
+```
+
+---
+
+## 🔮 Future Enhancements
+
+- [ ] Support for more DEXs (Turbos, Aftermath)
+- [ ] Staking integration (native SUI staking)
+- [ ] Multi-token swaps (A → B → C routing)
+- [ ] NFT marketplace integration (Tradeport, Clutchy)
+- [ ] Push notifications for deposits
+- [ ] Webhook support for transaction status
+- [ ] Multi-signature withdrawals for security
+- [ ] Sui Kiosk standard support
+- [ ] Batch transaction optimization
+- [ ] DCA (Dollar Cost Averaging) strategies
+- [ ] Portfolio analytics dashboard
+- [ ] Multi-chain support (expand beyond Sui)
+
+---
+
+## 📚 Resources
+
+### Documentation
+- [Sui Documentation](https://docs.sui.io)
+- [Fetch.ai uAgents](https://fetch.ai/docs)
+- [Cetus DEX Docs](https://docs.cetus.zone)
+- [Agentverse](https://agentverse.ai/docs)
+
+### Tools
+- [Sui Explorer (Testnet)](https://suiscan.xyz/testnet)
+- [Sui Wallet](https://chrome.google.com/webstore/detail/sui-wallet)
+- [ASI:One Chat](https://asi.one)
+- [Neon Database](https://neon.tech)
+- [Railway](https://railway.app)
+
+### Community
+- [Sui Discord](https://discord.gg/sui)
+- [Fetch.ai Discord](https://discord.gg/fetchai)
+- [GitHub Issues](https://github.com/ngna3007)
+
+---
+
+## 👥 Support
+
+For questions, issues, or contributions:
+
+- **Email**: ngocanh30075@gmail.com
+- **GitHub**: https://github.com/ngna3007
+
+---
+
+## 📝 License
+
+MIT License - see LICENSE file for details
+
+---
+
+## 🏆 Hackathon Submission
+
+**Built for**: ASI Alliance Hackathon
+**Track**: Innovation Lab / DeFi
+**Category**: AI Agents × Blockchain Integration
+
+**Key Innovations:**
+1. **Multi-User Custodial Architecture** - Novel hybrid approach for agent wallets
+2. **Semantic PTB Registry** - AI-powered transaction template matching
+3. **Gas Abstraction** - Zero friction for AI agent users
+4. **Production Ready** - Live testnet deployment with full test coverage
+
+**Live Demo:**
+- Agent Address: `agent1qfn954mwxwcr54g0qdd3f3gypxfhc2kqdqj5pkjx22zpcutr2p7sqzdj2rm`
+- Interact via ASI:One or Agentverse
+- Backend: Railway-hosted with Neon PostgreSQL
+- All 11 tests passing, NFT flow validated
+
+---
+
+**Built with 💙 for ASI Alliance Hackathon**
