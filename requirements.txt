@@ -1,0 +1,34 @@
+# SuiVisor Multi-Agent System Dependencies
+
+# Core uAgents Framework
+uagents>=0.21.1
+uagents-core>=0.2.0
+
+# ASI Alliance Integration
+hyperon>=0.1.0  # MeTTa knowledge graph
+
+# HTTP & API
+httpx>=0.27.0
+requests>=2.31.0
+
+# Environment & Configuration
+python-dotenv>=1.0.0
+
+# Data Validation & Parsing
+pydantic>=2.0.0
+
+# Date & Time
+python-dateutil>=2.8.2
+
+# Async Support
+aiohttp>=3.9.0
+
+# Logging & Monitoring
+structlog>=24.0.0
+
+# Testing (optional)
+pytest>=7.4.0
+pytest-asyncio>=0.21.0
+
+# Type Checking (optional)
+mypy>=1.5.0

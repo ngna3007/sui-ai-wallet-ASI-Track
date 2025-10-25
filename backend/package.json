@@ -1,0 +1,50 @@
+{
+  "name": "suivisor-ptb-backend",
+  "version": "1.0.0",
+  "description": "Full PTB execution backend for SuiVisor multi-agent system with semantic search",
+  "main": "server.ts",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch server.ts",
+    "start": "tsx server.ts",
+    "build": "tsc",
+    "db:studio": "drizzle-kit studio",
+    "db:push": "drizzle-kit push",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "tsx lib/db/migrate.ts",
+    "test": "cd tests && ./run-all-tests.sh",
+    "test:all": "tsx tests/test-all-endpoints.ts",
+    "test:db": "tsx tests/test-db-connection.ts",
+    "test:api": "tsx tests/test-api-endpoints.ts",
+    "test:agent": "python3 tests/test-agent-integration.py"
+  },
+  "dependencies": {
+    "@ai-sdk/anthropic": "^2.0.15",
+    "@cetusprotocol/aggregator-sdk": "^0.16.0",
+    "@cetusprotocol/cetus-sui-clmm-sdk": "^5.4.0",
+    "@mysten/kiosk": "^0.12.23",
+    "@mysten/sui": "1.37.3",
+    "@tradeport/sui-trading-sdk": "^0.4.28",
+    "ai": "5.0.0-beta.6",
+    "cors": "^2.8.5",
+    "csv-parse": "^6.1.0",
+    "dotenv": "^16.6.1",
+    "drizzle-orm": "^0.34.1",
+    "express": "^4.18.2",
+    "postgres": "^3.4.7",
+    "tslib": "^2.8.1",
+    "voyageai": "^0.0.3",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.17",
+    "@types/express": "^4.17.21",
+    "@types/node": "^22.17.2",
+    "drizzle-kit": "^0.25.0",
+    "tsx": "^4.20.4",
+    "typescript": "^5.9.2"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
