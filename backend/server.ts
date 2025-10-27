@@ -20,10 +20,7 @@ import {
 import { findBestPool, buildSwapTransaction } from './lib/services/cetus-swap.js';
 import {
   getOrCreateUser,
-  getUserBalances,
   checkAndProcessDeposits,
-  sweepUserDeposits,
-  processWithdrawal,
   getUserTransactions,
 } from './lib/services/user-manager.js';
 import { db, schema } from './db/drizzle-client.js';
@@ -39,7 +36,7 @@ app.use(express.json());
 const PORT = process.env.PORT || process.env.BACKEND_PORT || 3000;
 const SUI_NETWORK = process.env.SUI_NETWORK || 'testnet';
 const DATABASE_URL = process.env.DATABASE_URL;
-const API_KEY = process.env.API_KEY; // Secure API key for agent authentication
+const API_KEY = process.env.BACKEND_API_KEY; // Secure API key for agent authentication
 
 // Global Sui client for blockchain queries (testnet)
 const suiClient = new SuiClient({ url: 'https://fullnode.testnet.sui.io:443' });
@@ -924,41 +921,6 @@ app.get('/api/user/info', async (req, res) => {
 });
 
 /**
- * GET /api/user/balance
- * Get user's virtual balances
- *
- * Query: { userAddress: string }
- */
-app.get('/api/user/balance', async (req, res) => {
-  try {
-    const { userAddress } = req.query;
-
-    if (!userAddress || typeof userAddress !== 'string') {
-      return res.status(400).json({
-        success: false,
-        error: 'userAddress query parameter is required',
-      });
-    }
-
-    console.log(`💰 [User] Get balance: ${userAddress}`);
-
-    const balances = await getUserBalances(userAddress);
-
-    res.json({
-      success: true,
-      userAddress,
-      balances,
-    });
-  } catch (error: any) {
-    console.error('❌ [User] Error:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message,
-    });
-  }
-});
-
-/**
  * POST /api/user/deposit/check
  * Check for new deposits to user's deposit address
  *
@@ -987,95 +949,6 @@ app.post('/api/user/deposit/check', async (req, res) => {
     });
   } catch (error: any) {
     console.error('❌ [Deposit] Error:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message,
-    });
-  }
-});
-
-/**
- * POST /api/user/deposit/sweep
- * Sweep funds from user's deposit address to agent's main wallet
- *
- * Body: { userAddress: string }
- */
-app.post('/api/user/deposit/sweep', async (req, res) => {
-  try {
-    const { userAddress } = req.body;
-
-    if (!userAddress) {
-      return res.status(400).json({
-        success: false,
-        error: 'userAddress is required',
-      });
-    }
-
-    console.log(`🧹 [Sweep] Sweeping deposits for: ${userAddress}`);
-
-    const result = await sweepUserDeposits(userAddress);
-
-    if (!result.success) {
-      return res.status(400).json(result);
-    }
-
-    res.json({
-      success: true,
-      userAddress,
-      amount: result.amount,
-      digest: result.digest,
-      message: `Swept ${result.amount} SUI to main wallet`,
-    });
-  } catch (error: any) {
-    console.error('❌ [Sweep] Error:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message,
-    });
-  }
-});
-
-/**
- * POST /api/user/withdraw
- * Process withdrawal from user's virtual balance
- *
- * Body: {
- *   userAddress: string,
- *   tokenType: string,
- *   amount: number,
- *   recipientAddress: string
- * }
- */
-app.post('/api/user/withdraw', async (req, res) => {
-  try {
-    const { userAddress, tokenType, amount, recipientAddress } = req.body;
-
-    if (!userAddress || !tokenType || !amount || !recipientAddress) {
-      return res.status(400).json({
-        success: false,
-        error: 'userAddress, tokenType, amount, and recipientAddress are required',
-      });
-    }
-
-    console.log(`💸 [Withdraw] ${userAddress}: ${amount} ${tokenType} → ${recipientAddress}`);
-
-    const result = await processWithdrawal(userAddress, tokenType, amount, recipientAddress);
-
-    if (!result.success) {
-      return res.status(400).json(result);
-    }
-
-    res.json({
-      success: true,
-      userAddress,
-      tokenType,
-      amount,
-      recipientAddress,
-      digest: result.digest,
-      message: `Withdrew ${amount} ${tokenType}`,
-    });
-  } catch (error: any) {
-    console.error('❌ [Withdraw] Error:', error);
     res.status(500).json({
       success: false,
       error: error.message,
@@ -1189,12 +1062,10 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log(`   POST /api/mint-nft             ← Mint NFT`);
   console.log(`   POST /api/transfer-nft         ← Transfer NFT`);
   console.log('');
-  console.log('👥 Multi-User Wallet:');
+  console.log('👥 Multi-User Wallet (Non-Custodial):');
   console.log(`   GET  /api/user/info            ← Get/create user + deposit address`);
-  console.log(`   GET  /api/user/balance         ← Get user balances`);
+  console.log(`   GET  /api/balance              ← Get blockchain balance (any address)`);
   console.log(`   POST /api/user/deposit/check   ← Check for deposits`);
-  console.log(`   POST /api/user/deposit/sweep   ← Sweep to main wallet`);
-  console.log(`   POST /api/user/withdraw        ← Withdraw from balance`);
   console.log(`   GET  /api/user/transactions    ← Transaction history`);
   console.log('');
   console.log('🏥 System:');
