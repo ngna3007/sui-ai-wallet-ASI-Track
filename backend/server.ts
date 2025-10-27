@@ -41,6 +41,9 @@ const SUI_NETWORK = process.env.SUI_NETWORK || 'testnet';
 const DATABASE_URL = process.env.DATABASE_URL;
 const API_KEY = process.env.API_KEY; // Secure API key for agent authentication
 
+// Global Sui client for blockchain queries (testnet)
+const suiClient = new SuiClient({ url: 'https://fullnode.testnet.sui.io:443' });
+
 // Connect to existing PostgreSQL database
 const sql = postgres(DATABASE_URL, {
   max: 5,
@@ -200,8 +203,8 @@ app.post('/api/create-ptb', async (req, res) => {
       }
     }
 
-    // Extract parameters
-    const inputs = extractSimpleParameters(userIntent, template);
+    // Extract parameters using LLM
+    const inputs = await extractParametersWithLLM(userIntent, template);
     console.log('🔧 [PTB] Inputs:', inputs);
 
     // Build transaction
@@ -232,19 +235,34 @@ app.post('/api/create-ptb', async (req, res) => {
 
     console.log('✅ [PTB] Transaction built');
 
-    // TODO: Sign and execute
-    // For now, return mock response
-    const mockTxHash = `0x${Date.now().toString(16)}${Math.random().toString(16).slice(2, 10)}`;
+    // Sign and execute transaction with agent wallet
+    console.log('🔏 [PTB] Signing and executing...');
+    const result = await signAndExecuteTransaction(builtTx);
+
+    if (!result.success) {
+      return res.status(500).json({
+        success: false,
+        error: result.error || 'Transaction execution failed',
+      });
+    }
+
+    console.log(`✅ [PTB] Transaction executed: ${result.digest}`);
+
+    // Calculate gas used from effects
+    const gasUsed = result.effects?.gasUsed
+      ? (Number(result.effects.gasUsed.computationCost) +
+         Number(result.effects.gasUsed.storageCost) -
+         Number(result.effects.gasUsed.storageRebate)) / 1_000_000_000
+      : 0;
 
     res.json({
       success: true,
-      transactionHash: mockTxHash,
-      gasUsed: 0.02,
+      transactionHash: result.digest,
+      gasUsed,
       templateName: template.name,
       templateId: template.id,
       inputs,
-      mode: 'mock',
-      message: 'Mock transaction - add signing for production',
+      explorerUrl: `https://suiscan.xyz/${SUI_NETWORK}/tx/${result.digest}`,
     });
 
   } catch (error) {
@@ -285,18 +303,123 @@ app.get('/api/templates', async (req, res) => {
   }
 });
 
-function extractSimpleParameters(text: string, template: any): Record<string, any> {
+async function extractParametersWithLLM(
+  text: string,
+  template: any
+): Promise<Record<string, any>> {
+  // If no input schema, return empty
+  if (!template.inputSchema || !template.inputSchema.properties) {
+    return {};
+  }
+
+  const properties = template.inputSchema.properties;
+  const required = template.inputSchema.required || [];
+
+  // Handle templates with no parameters
+  if (Object.keys(properties).length === 0) {
+    return {};
+  }
+
+  // Build system prompt
+  const requiredFields = required
+    .map((field: string) => {
+      const fieldInfo = properties[field];
+      return `- ${field} (${fieldInfo.type}): ${fieldInfo.description || 'No description'}`;
+    })
+    .join('\n');
+
+  const optionalFields = Object.keys(properties)
+    .filter((field) => !required.includes(field))
+    .map((field) => {
+      const fieldInfo = properties[field];
+      return `- ${field} (${fieldInfo.type}): ${fieldInfo.description || 'No description'}`;
+    })
+    .join('\n');
+
+  const systemPrompt = `You are a parameter extraction assistant. Extract structured parameters from user input.
+
+PTB: ${template.name}
+Description: ${template.description}
+
+Required Parameters:
+${requiredFields || 'None'}
+
+Optional Parameters:
+${optionalFields || 'None'}
+
+User Input: "${text}"
+
+CRITICAL RULES:
+1. ONLY extract parameters listed in the schema above
+2. If a parameter cannot be determined, omit it
+3. Return ONLY a JSON object, no other text
+4. For addresses, accept any length (40 or 64 characters)
+5. For amounts, use the numeric value only
+
+Examples:
+- "transfer 0.1 SUI to 0x742d35cc..." → {"amount": "0.1", "recipient": "0x742d35cc..."}
+- "mint NFT called Dragon with description 'Fire dragon' and image https://example.com/dragon.png" → {"name": "Dragon", "description": "Fire dragon", "imageUrl": "https://example.com/dragon.png"}
+- "swap 0.5 SUI for USDC" → {"amount": "0.5", "fromToken": "SUI", "toToken": "USDC"}
+- "stake 1 SUI" → {"amount": "1"}
+
+Return only the JSON object:`;
+
+  try {
+    // Use Anthropic API for parameter extraction
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'x-api-key': process.env.ANTHROPIC_API_KEY || '',
+        'anthropic-version': '2023-06-01',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'claude-3-5-sonnet-20241022',
+        max_tokens: 1024,
+        temperature: 0.1,
+        system: systemPrompt,
+        messages: [{ role: 'user', content: text }],
+      }),
+    });
+
+    if (!response.ok) {
+      console.error('LLM parameter extraction failed:', response.statusText);
+      return extractSimpleParametersFallback(text);
+    }
+
+    const data = (await response.json()) as any;
+    const responseText = data.content[0].text;
+
+    console.log('🧠 LLM parameter extraction response:', responseText);
+
+    // Parse JSON from response
+    const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      const params = JSON.parse(jsonMatch[0]);
+      console.log('✅ Extracted parameters:', params);
+      return params;
+    }
+
+    console.warn('No JSON found in LLM response, using fallback');
+    return extractSimpleParametersFallback(text);
+  } catch (error) {
+    console.error('LLM extraction error:', error);
+    return extractSimpleParametersFallback(text);
+  }
+}
+
+function extractSimpleParametersFallback(text: string): Record<string, any> {
   const inputs: Record<string, any> = {};
   const lower = text.toLowerCase();
 
   // Amount
   const amountMatch = text.match(/(\d+\.?\d*)/);
   if (amountMatch) {
-    inputs.amount = parseFloat(amountMatch[1]);
+    inputs.amount = amountMatch[1];
   }
 
   // Tokens
-  const tokens = ['sui', 'usdc'];
+  const tokens = ['sui', 'usdc', 'usdt'];
   for (const token of tokens) {
     if (lower.includes(token)) {
       if (!inputs.fromToken) inputs.fromToken = token.toUpperCase();
@@ -304,10 +427,16 @@ function extractSimpleParameters(text: string, template: any): Record<string, an
     }
   }
 
-  // Address
-  const addressMatch = text.match(/0x[a-fA-F0-9]{64}/);
+  // Address (accept 40 or 64 character addresses)
+  const addressMatch = text.match(/0x[a-fA-F0-9]{40,64}/);
   if (addressMatch) {
     inputs.recipient = addressMatch[0];
+  }
+
+  // NFT parameters
+  const urlMatch = text.match(/(https?:\/\/[^\s]+)/);
+  if (urlMatch) {
+    inputs.imageUrl = urlMatch[0];
   }
 
   return inputs;
@@ -346,8 +475,7 @@ app.post('/api/execute-transaction', async (req, res) => {
       success: true,
       digest: result.digest,
       effects: result.effects,
-      mode: 'real',
-      message: 'Transaction executed on Sui blockchain',
+      explorerUrl: `https://suiscan.xyz/${SUI_NETWORK}/tx/${result.digest}`,
     });
   } catch (error: any) {
     console.error('❌ [Execute] Error:', error);
@@ -390,8 +518,9 @@ app.post('/api/transfer', async (req, res) => {
     res.json({
       success: true,
       digest: result.digest,
-      mode: 'real',
-      message: `Transferred ${amount} SUI to ${recipient}`,
+      amount,
+      recipient,
+      explorerUrl: `https://suiscan.xyz/${SUI_NETWORK}/tx/${result.digest}`,
     });
   } catch (error: any) {
     console.error('❌ [Transfer] Error:', error);
@@ -472,9 +601,8 @@ app.post('/api/swap', async (req, res) => {
       fromToken,
       toToken,
       amount,
-      executedBy: agentInfo.address, // Agent wallet executes on behalf of Fetch.ai user
-      requestedBy: userAddress, // Original Fetch.ai agent address
-      mode: 'fast-path-cetus-sdk',
+      executedBy: agentInfo.address, // Agent wallet executes on behalf of user
+      requestedBy: userAddress, // Original user address
       explorerUrl: `https://suiscan.xyz/${SUI_NETWORK}/tx/${result.digest}`
     });
   } catch (error: any) {
@@ -514,7 +642,6 @@ app.post('/api/stake', async (req, res) => {
       success: true,
       transactionHash: result.digest,
       templateName: '@sui/stake',
-      mode: 'fast-path-real',
       explorerUrl: `https://suiscan.xyz/${SUI_NETWORK}/tx/${result.digest}`
     });
   } catch (error: any) {
@@ -588,7 +715,6 @@ app.post('/api/mint-nft', async (req, res) => {
       transactionHash: result.digest,
       nftObjectId,
       templateName: '@commandoss/mint-nft',
-      mode: 'fast-path-real',
       explorerUrl: `https://suiscan.xyz/${SUI_NETWORK}/tx/${result.digest}`
     });
   } catch (error: any) {
@@ -656,11 +782,107 @@ app.post('/api/transfer-nft', async (req, res) => {
       nftObjectId,
       recipientAddress,
       templateName: 'direct-transfer',
-      mode: 'fast-path-real',
       explorerUrl: `https://suiscan.xyz/${SUI_NETWORK}/tx/${result.digest}`
     });
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+/**
+ * GET /api/balance
+ * Get blockchain balance for any address (reads directly from Sui blockchain)
+ *
+ * Query: { address: string }
+ */
+app.get('/api/balance', async (req, res) => {
+  try {
+    const { address } = req.query;
+
+    if (!address || typeof address !== 'string') {
+      return res.status(400).json({
+        success: false,
+        error: 'address query parameter is required',
+      });
+    }
+
+    console.log(`💰 [Balance] Reading from blockchain: ${address}`);
+
+    // Get ALL coins owned by this address
+    const allCoins = await suiClient.getAllCoins({ owner: address });
+
+    const balances: Record<string, number> = {};
+    const coinDetails: Record<string, any> = {};
+
+    // Common token name mappings
+    const tokenNameMap: Record<string, string> = {
+      '0x2::sui::SUI': 'SUI',
+      '0x5d4b302506645c37ff133b98c4b50a5ae14841659738d6d733d59d0d217a93bf::coin::COIN': 'USDC',
+      '0xc060006111016b8a020ad5b33834984a437aaa7d3c74c18e09a95d48aceab08c::coin::COIN': 'USDT',
+      // Add more token mappings as needed
+    };
+
+    // Common token decimals
+    const tokenDecimalsMap: Record<string, number> = {
+      'SUI': 9,
+      'USDC': 6,
+      'USDT': 6,
+    };
+
+    // Group coins by type and sum balances
+    const coinsByType: Record<string, bigint> = {};
+
+    for (const coin of allCoins.data) {
+      const coinType = coin.coinType;
+      const balance = BigInt(coin.balance);
+
+      if (coinsByType[coinType]) {
+        coinsByType[coinType] += balance;
+      } else {
+        coinsByType[coinType] = balance;
+      }
+    }
+
+    // Convert to readable format
+    for (const [coinType, totalBalance] of Object.entries(coinsByType)) {
+      // Get token name (use mapping or extract from coin type)
+      let tokenName = tokenNameMap[coinType];
+
+      if (!tokenName) {
+        // Extract token name from coin type (e.g., "0x...::token::TOKEN" -> "TOKEN")
+        const parts = coinType.split('::');
+        tokenName = parts[parts.length - 1] || coinType.substring(0, 8);
+      }
+
+      // Get decimals (default to 9 if unknown)
+      const decimals = tokenDecimalsMap[tokenName] || 9;
+      const divisor = Math.pow(10, decimals);
+
+      balances[tokenName] = Number(totalBalance) / divisor;
+
+      coinDetails[tokenName] = {
+        coinType,
+        balance: Number(totalBalance),
+        decimals,
+        readableBalance: balances[tokenName],
+      };
+    }
+
+    console.log(`✅ [Balance] Found ${Object.keys(balances).length} token types:`, balances);
+
+    res.json({
+      success: true,
+      address,
+      balances,
+      coinDetails,
+      totalTokenTypes: Object.keys(balances).length,
+    });
+  } catch (error: any) {
+    console.error('❌ [Balance] Error:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message,
+    });
   }
 });
 

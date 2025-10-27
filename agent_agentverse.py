@@ -26,6 +26,13 @@ from uagents_core.contrib.protocols.chat import (
     TextContent,
 )
 
+# Load environment variables for local development
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass  # dotenv not available in Agentverse, env vars come from secrets
+
 # ============================================================================
 # CONFIGURATION
 # ============================================================================
@@ -38,6 +45,7 @@ BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:3000")
 BACKEND_API_KEY = os.getenv("BACKEND_API_KEY")  # API key for backend authentication
 CMC_API_KEY = os.getenv("COINMARKETCAP_API_KEY")
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
+X_BEARER_TOKEN = os.getenv("X_BEARER_TOKEN")  # Twitter/X Bearer token for API v2 (optional)
 
 # Anthropic client
 anthropic_client = Anthropic(api_key=ANTHROPIC_API_KEY) if ANTHROPIC_API_KEY else None
@@ -50,6 +58,38 @@ def get_backend_headers():
         headers["X-API-Key"] = BACKEND_API_KEY
     return headers
 
+# ============================================================================
+# X API CACHING (for free tier: 1 request per 15 minutes)
+# ============================================================================
+
+# In-memory cache for X API responses
+# Structure: {query: {"data": response_data, "timestamp": datetime}}
+X_API_CACHE = {}
+CACHE_TTL_SECONDS = 900  # 15 minutes
+
+def get_cached_news(query: str) -> Optional[dict]:
+    """Get cached news data if available and not expired"""
+    if query not in X_API_CACHE:
+        return None
+
+    cached = X_API_CACHE[query]
+    cached_time = cached["timestamp"]
+    age_seconds = (datetime.now(timezone.utc) - cached_time).total_seconds()
+
+    if age_seconds < CACHE_TTL_SECONDS:
+        return cached["data"]
+    else:
+        # Expired, remove from cache
+        del X_API_CACHE[query]
+        return None
+
+def cache_news(query: str, data: dict):
+    """Cache news data with current timestamp"""
+    X_API_CACHE[query] = {
+        "data": data,
+        "timestamp": datetime.now(timezone.utc)
+    }
+
 # Create agent
 agent = Agent(
     name=AGENT_NAME,
@@ -60,7 +100,7 @@ agent = Agent(
 )
 
 # Chat protocol
-chat_proto = Protocol(spec=chat_protocol_spec)
+chat_proto = Protocol(name="AgentChatProtocol", version="0.1.0", spec=chat_protocol_spec)
 
 print(f"\n{'='*60}")
 print(f"🤖 Sui AI Assistant")
@@ -109,34 +149,40 @@ def parse_intent_with_llm(query: str) -> dict:
 
     try:
         response = anthropic_client.messages.create(
-            model="claude-3-5-sonnet-20241022",
+            model="claude-haiku-4-5-20251001",
             max_tokens=1024,
-            system="""You are a conversational DeFi intent parser for Sui blockchain. Parse user queries into structured actions.
+            system="""You are a conversational DeFi intent parser for Sui AI Assistant - a custodial wallet system.
+
+CONTEXT: This is a custodial wallet. Each user has a unique deposit address. Users deposit SUI to that address, then use their balance for swaps, NFTs, etc.
 
 Available actions:
-- balance: Check wallet balance
-- deposit: Get deposit address
-- swap: Exchange tokens (needs: amount, from_token, to_token)
-- nft_mint: Create NFT (needs: nft_name, description, image_url)
+- balance: Check wallet balance (shows user's deposited funds)
+- deposit: Get unique deposit address (users need this to fund their account)
+- swap: Exchange tokens (needs: amount, from_token, to_token) - uses deposited balance
+- nft_mint: Create NFT (needs: nft_name, description, image_url) - uses deposited balance
 - nft_list: View owned NFTs
 - nft_transfer: Send NFT (needs: nft_id, recipient)
 - price: Check token price (needs: token)
+- news: Get crypto/DeFi news from X/Twitter (optional: query for specific topics)
 - help: Show capabilities, answer "what can you do", general questions, greetings
 - unknown: Unrecognizable intent
 
 Conversational queries that should map to "help":
 - Greetings: "hi", "hello", "hey", "greetings"
 - Questions about capabilities: "can I ask", "what can you do", "are you able", "do you support"
-- General questions without specific DeFi intent
+- General questions about "how it works", "what is deposit address", etc.
 
 Examples:
 - "hi" → {"action": "help"}
-- "can I ask you something" → {"action": "help"}
-- "what can you do" → {"action": "help"}
+- "what is deposit address" → {"action": "help"}
+- "how does this work" → {"action": "help"}
 - "check my balance" → {"action": "balance"}
+- "deposit" or "how do I deposit" → {"action": "deposit"}
 - "swap 10 SUI to USDC" → {"action": "swap", "parameters": {"amount": 10, "from_token": "SUI", "to_token": "USDC"}}
 - "I want to mint nft" → {"action": "nft_mint", "parameters": {}}
 - "mint nft 'Cool Art' with description 'My artwork' and image https://example.com/img.png" → {"action": "nft_mint", "parameters": {"nft_name": "Cool Art", "description": "My artwork", "image_url": "https://example.com/img.png"}}
+- "crypto news" or "what's happening in DeFi" → {"action": "news", "parameters": {}}
+- "news about SUI" → {"action": "news", "parameters": {"query": "SUI"}}
 
 Respond ONLY with JSON:
 {
@@ -212,75 +258,205 @@ def parse_intent_regex(query: str) -> dict:
     return intent
 
 # ============================================================================
-# API HANDLERS
+# LLM RESPONSE GENERATOR
 # ============================================================================
 
-async def handle_balance(ctx: Context, user_address: str) -> str:
-    """Get user balance"""
+def generate_natural_response(ctx: Context, user_query: str, action: str, result_data: dict) -> str:
+    """Generate natural response using LLM based on action result"""
+
+    if not anthropic_client:
+        # Fallback without LLM - return simple formatted response
+        if not result_data.get("success"):
+            return f"❌ {result_data.get('error', 'An error occurred')}"
+        return f"✅ Operation completed: {result_data.get('data', {})}"
+
+    try:
+        # Prepare context for LLM
+        system_context = """You are Sui AI Assistant, a friendly AI assistant for a custodial Sui wallet.
+
+Generate natural, conversational responses based on the operation result.
+
+Guidelines:
+- Be friendly and helpful
+- Use emojis sparingly but appropriately
+- Keep responses concise but informative
+- **IMPORTANT: Use proper line breaks (\n\n) to separate paragraphs and make responses readable**
+- **Format data clearly with line breaks between items**
+- If there's an error, explain it clearly and suggest next steps
+- For successful operations, confirm what happened and what the user can do next
+- Match the tone of the user's query
+
+FORMATTING RULES:
+- Put each piece of information on a new line
+- Use double newlines (\n\n) between sections
+- For lists or multiple data points, put each on its own line
+- Example: "Price: $2.71\n\n24h Change: +7.44%\n24h Volume: $859M\nMarket Cap: $9.84B"
+
+IMPORTANT CONTEXT:
+- This is a custodial wallet system
+- Users have unique deposit addresses
+- Users must deposit SUI first before using swaps/NFTs
+"""
+
+        # Format result data as context
+        result_context = f"""
+User Query: "{user_query}"
+Action: {action}
+Result: {json.dumps(result_data, indent=2)}
+"""
+
+        response = anthropic_client.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=512,
+            system=system_context,
+            messages=[{"role": "user", "content": result_context}]
+        )
+
+        return response.content[0].text
+
+    except Exception as e:
+        ctx.logger.error(f"❌ LLM response generation failed: {e}")
+        # Fallback
+        if not result_data.get("success"):
+            return f"❌ {result_data.get('error', 'An error occurred')}"
+        return f"✅ Operation completed successfully"
+
+# ============================================================================
+# API HANDLERS (Return structured data)
+# ============================================================================
+
+async def handle_balance(ctx: Context, user_address: str) -> dict:
+    """Get user balance - returns structured data (reads from blockchain)"""
     ctx.logger.info(f"💰 Fetching balance for {user_address[:12]}...")
     try:
         async with httpx.AsyncClient(timeout=15.0, follow_redirects=True) as client:
+            # Get user's deposit address
             response = await client.get(
                 f"{BACKEND_URL}/api/user/info",
                 params={"userAddress": user_address},
                 headers=get_backend_headers()
             )
             if response.status_code != 200:
-                return f"❌ Backend error: {response.status_code}\n\nThe backend might be sleeping. Please try again!"
+                return {
+                    "success": False,
+                    "error": f"Backend error (status {response.status_code}). The backend might be sleeping - please try again in a moment."
+                }
 
             result = response.json()
             if not result.get("success"):
-                return f"❌ Error: {result.get('error', 'Unknown error')}"
+                return {
+                    "success": False,
+                    "error": result.get('error', 'Unknown error')
+                }
 
             user = result.get("user", {})
-            balances = user.get("balances", {})
-            deposit_addr = user.get("depositAddress", "N/A")
+            deposit_address = user.get("depositAddress")
 
-            response_text = "💰 Your Wallet Balance\n\n"
-            for token, amount in balances.items():
-                response_text += f"- {token}: {amount}\n"
-            response_text += f"\n📍 Deposit Address\n{deposit_addr}\n\nSend SUI to this address to add funds!"
+            if not deposit_address:
+                return {
+                    "success": False,
+                    "error": "No deposit address found"
+                }
 
-            ctx.logger.info("✅ Balance retrieved")
-            return response_text
+            # Read balance directly from blockchain
+            ctx.logger.info(f"🔍 Reading balance from blockchain: {deposit_address[:12]}...")
+            balance_response = await client.get(
+                f"{BACKEND_URL}/api/balance",
+                params={"address": deposit_address},
+                headers=get_backend_headers()
+            )
+
+            if balance_response.status_code == 200:
+                balance_data = balance_response.json()
+                ctx.logger.info("✅ Balance retrieved from blockchain")
+                return {
+                    "success": True,
+                    "data": {
+                        "balances": balance_data.get("balances", {}),
+                        "depositAddress": deposit_address
+                    }
+                }
+            else:
+                return {
+                    "success": False,
+                    "error": "Failed to read blockchain balance"
+                }
+
     except httpx.TimeoutException:
-        return "❌ Request timed out. The backend might be waking up - please try again in 30 seconds!"
+        return {
+            "success": False,
+            "error": "Request timed out. The backend might be waking up - please try again in 30 seconds."
+        }
     except Exception as e:
         ctx.logger.error(f"❌ Balance error: {e}")
-        return f"❌ Connection error. The backend might be sleeping.\n\nPlease try again in a moment!"
+        return {
+            "success": False,
+            "error": "Connection error. The backend might be sleeping - please try again in a moment."
+        }
 
-async def handle_deposit(ctx: Context, user_address: str) -> str:
-    """Get deposit address"""
+async def handle_deposit(ctx: Context, user_address: str) -> dict:
+    """Get deposit address - returns structured data (with blockchain balance)"""
     ctx.logger.info(f"📍 Fetching deposit address...")
     try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
+        async with httpx.AsyncClient(timeout=15.0, follow_redirects=True) as client:
+            # Get user info (deposit address)
             response = await client.get(
                 f"{BACKEND_URL}/api/user/info",
                 params={"userAddress": user_address},
                 headers=get_backend_headers()
             )
             if response.status_code != 200:
-                return f"❌ Backend error: {response.status_code}"
+                return {
+                    "success": False,
+                    "error": f"Backend error (status {response.status_code})"
+                }
 
             result = response.json()
             if not result.get("success"):
-                return f"❌ Error: {result.get('error', 'Unknown error')}"
+                return {
+                    "success": False,
+                    "error": result.get('error', 'Unknown error')
+                }
 
             user = result.get("user", {})
-            deposit_addr = user.get("depositAddress", "N/A")
-            balances = user.get("balances", {})
-            sui_balance = balances.get("SUI", 0)
+            deposit_address = user.get("depositAddress")
 
-            response_text = f"📍 Your Deposit Address\n\n{deposit_addr}\n\n💰 Current Balance: {sui_balance} SUI\n\nSend SUI to this address from any wallet to add funds!"
+            if not deposit_address:
+                return {
+                    "success": False,
+                    "error": "No deposit address found"
+                }
+
+            # Read balance from blockchain
+            ctx.logger.info(f"🔍 Reading balance from blockchain...")
+            balance_response = await client.get(
+                f"{BACKEND_URL}/api/balance",
+                params={"address": deposit_address},
+                headers=get_backend_headers()
+            )
+
+            balances = {}
+            if balance_response.status_code == 200:
+                balance_data = balance_response.json()
+                balances = balance_data.get("balances", {})
 
             ctx.logger.info("✅ Deposit address retrieved")
-            return response_text
+            return {
+                "success": True,
+                "data": {
+                    "depositAddress": deposit_address,
+                    "currentBalance": balances
+                }
+            }
     except Exception as e:
         ctx.logger.error(f"❌ Deposit error: {e}")
-        return f"❌ Error: {str(e)}"
+        return {
+            "success": False,
+            "error": str(e)
+        }
 
-async def handle_swap(ctx: Context, user_address: str, from_token: str, to_token: str, amount: float) -> str:
-    """Execute token swap"""
+async def handle_swap(ctx: Context, user_address: str, from_token: str, to_token: str, amount: float) -> dict:
+    """Execute token swap - returns structured data"""
     ctx.logger.info(f"🔄 Swapping {amount} {from_token} → {to_token}")
     try:
         async with httpx.AsyncClient(timeout=60.0, follow_redirects=True) as client:
@@ -296,28 +472,43 @@ async def handle_swap(ctx: Context, user_address: str, from_token: str, to_token
                 headers=get_backend_headers()
             )
             if response.status_code != 200:
-                return f"❌ Backend error: {response.status_code}\n\nThe backend might be sleeping. Please try again!"
+                return {
+                    "success": False,
+                    "error": f"Backend error (status {response.status_code}). The backend might be sleeping - please try again."
+                }
 
             result = response.json()
             if not result.get("success"):
-                return f"❌ Swap failed: {result.get('error', 'Unknown error')}"
-
-            tx_hash = result.get("transactionHash", "N/A")
-            tx_short = tx_hash[:16] + "..." if tx_hash != "N/A" else "N/A"
-            explorer_url = result.get("explorerUrl", "")
-
-            response_text = f"✅ Swap completed!\n\n🔄 Swapped: {amount} {from_token} → {to_token}\n🔗 Transaction: {tx_short}\n\n📊 View on Explorer:\n{explorer_url}\n\nType 'balance' to check your updated balance!"
+                return {
+                    "success": False,
+                    "error": result.get('error', 'Unknown error')
+                }
 
             ctx.logger.info("✅ Swap completed")
-            return response_text
+            return {
+                "success": True,
+                "data": {
+                    "amount": amount,
+                    "fromToken": from_token,
+                    "toToken": to_token,
+                    "transactionHash": result.get("transactionHash", "N/A"),
+                    "explorerUrl": result.get("explorerUrl", "")
+                }
+            }
     except httpx.TimeoutException:
-        return "❌ Request timed out. The backend might be waking up - please try again in 30 seconds!"
+        return {
+            "success": False,
+            "error": "Request timed out. The backend might be waking up - please try again in 30 seconds."
+        }
     except Exception as e:
         ctx.logger.error(f"❌ Swap error: {e}")
-        return f"❌ Connection error. The backend might be sleeping.\n\nPlease try again in a moment!"
+        return {
+            "success": False,
+            "error": "Connection error. The backend might be sleeping - please try again in a moment."
+        }
 
-async def handle_nft_mint(ctx: Context, user_address: str, nft_name: str, description: str, image_url: str) -> str:
-    """Mint NFT"""
+async def handle_nft_mint(ctx: Context, user_address: str, nft_name: str, description: str, image_url: str) -> dict:
+    """Mint NFT - returns structured data"""
     ctx.logger.info(f"🎨 Minting NFT: {nft_name}")
     try:
         async with httpx.AsyncClient(timeout=60.0, follow_redirects=True) as client:
@@ -332,31 +523,43 @@ async def handle_nft_mint(ctx: Context, user_address: str, nft_name: str, descri
                 headers=get_backend_headers()
             )
             if response.status_code != 200:
-                return f"❌ Backend error: {response.status_code}\n\nThe backend might be sleeping. Please try again in a moment!"
+                return {
+                    "success": False,
+                    "error": f"Backend error (status {response.status_code}). The backend might be sleeping - please try again in a moment."
+                }
 
             result = response.json()
             if not result.get("success"):
-                return f"❌ Minting failed: {result.get('error', 'Unknown error')}"
-
-            nft_id = result.get("nftObjectId", "N/A")
-            nft_short = nft_id[:16] + "..." if nft_id != "N/A" else "N/A"
-            tx_hash = result.get("transactionHash", "N/A")
-            tx_short = tx_hash[:16] + "..." if tx_hash != "N/A" else "N/A"
-            explorer_url = result.get("explorerUrl", "")
-
-            response_text = f"✅ NFT Minted Successfully!\n\n🎨 Name: {nft_name}\n🆔 NFT ID: {nft_short}\n🔗 Transaction: {tx_short}\n\n📊 View on Explorer:\n{explorer_url}\n\nType 'my nfts' to see all your NFTs!"
+                return {
+                    "success": False,
+                    "error": result.get('error', 'Unknown error')
+                }
 
             ctx.logger.info("✅ NFT minted")
-            return response_text
+            return {
+                "success": True,
+                "data": {
+                    "nftName": nft_name,
+                    "nftObjectId": result.get("nftObjectId", "N/A"),
+                    "transactionHash": result.get("transactionHash", "N/A"),
+                    "explorerUrl": result.get("explorerUrl", "")
+                }
+            }
     except httpx.TimeoutException:
         ctx.logger.error("❌ NFT mint timeout")
-        return "❌ Request timed out. The backend might be waking up - please try again in 30 seconds!"
+        return {
+            "success": False,
+            "error": "Request timed out. The backend might be waking up - please try again in 30 seconds."
+        }
     except Exception as e:
         ctx.logger.error(f"❌ NFT mint error: {e}")
-        return f"❌ Connection error. The backend might be sleeping.\n\nPlease try again in a moment!"
+        return {
+            "success": False,
+            "error": "Connection error. The backend might be sleeping - please try again in a moment."
+        }
 
-async def handle_nft_list(ctx: Context, user_address: str) -> str:
-    """List user's NFTs"""
+async def handle_nft_list(ctx: Context, user_address: str) -> dict:
+    """List user's NFTs - returns structured data"""
     ctx.logger.info(f"🖼️ Listing NFTs...")
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
@@ -366,35 +569,35 @@ async def handle_nft_list(ctx: Context, user_address: str) -> str:
                 headers=get_backend_headers()
             )
             if response.status_code != 200:
-                return f"❌ Backend error: {response.status_code}"
+                return {
+                    "success": False,
+                    "error": f"Backend error (status {response.status_code})"
+                }
 
             result = response.json()
             if not result.get("success"):
-                return f"❌ Error: {result.get('error', 'Unknown error')}"
-
-            nfts = result.get("nfts", [])
-            count = result.get("count", 0)
-
-            if count == 0:
-                return "🖼️ Your NFTs\n\nYou don't own any NFTs yet.\n\nType 'mint nft \"My Cool NFT\"' to create one!"
-
-            response_text = f"🖼️ Your NFTs ({count} total)\n\n"
-            for nft in nfts[:10]:
-                nft_name = nft.get("name", "Unnamed")
-                nft_id = nft.get("nftObjectId", "N/A")
-                response_text += f"- {nft_name}\n  ID: {nft_id[:16]}...\n"
-
-            if count > 10:
-                response_text += f"\n... and {count - 10} more NFTs"
+                return {
+                    "success": False,
+                    "error": result.get('error', 'Unknown error')
+                }
 
             ctx.logger.info("✅ NFT list retrieved")
-            return response_text
+            return {
+                "success": True,
+                "data": {
+                    "nfts": result.get("nfts", []),
+                    "count": result.get("count", 0)
+                }
+            }
     except Exception as e:
         ctx.logger.error(f"❌ NFT list error: {e}")
-        return f"❌ Error: {str(e)}"
+        return {
+            "success": False,
+            "error": str(e)
+        }
 
-async def handle_nft_transfer(ctx: Context, user_address: str, nft_id: str, recipient: str) -> str:
-    """Transfer NFT"""
+async def handle_nft_transfer(ctx: Context, user_address: str, nft_id: str, recipient: str) -> dict:
+    """Transfer NFT - returns structured data"""
     ctx.logger.info(f"📤 Transferring NFT...")
     try:
         async with httpx.AsyncClient(timeout=30.0) as client:
@@ -408,32 +611,44 @@ async def handle_nft_transfer(ctx: Context, user_address: str, nft_id: str, reci
                 headers=get_backend_headers()
             )
             if response.status_code != 200:
-                return f"❌ Backend error: {response.status_code}"
+                return {
+                    "success": False,
+                    "error": f"Backend error (status {response.status_code})"
+                }
 
             result = response.json()
             if not result.get("success"):
-                return f"❌ Transfer failed: {result.get('error', 'Unknown error')}"
-
-            nft_short = nft_id[:16] + "..."
-            recipient_short = f"{recipient[:12]}...{recipient[-8:]}"
-            tx_hash = result.get("transactionHash", "N/A")
-            tx_short = tx_hash[:16] + "..." if tx_hash != "N/A" else "N/A"
-            explorer_url = result.get("explorerUrl", "")
-
-            response_text = f"✅ NFT Transferred Successfully!\n\n🆔 NFT ID: {nft_short}\n📥 To: {recipient_short}\n🔗 Transaction: {tx_short}\n\n📊 View on Explorer:\n{explorer_url}"
+                return {
+                    "success": False,
+                    "error": result.get('error', 'Unknown error')
+                }
 
             ctx.logger.info("✅ NFT transferred")
-            return response_text
+            return {
+                "success": True,
+                "data": {
+                    "nftObjectId": nft_id,
+                    "recipientAddress": recipient,
+                    "transactionHash": result.get("transactionHash", "N/A"),
+                    "explorerUrl": result.get("explorerUrl", "")
+                }
+            }
     except Exception as e:
         ctx.logger.error(f"❌ NFT transfer error: {e}")
-        return f"❌ Transfer error: {str(e)}"
+        return {
+            "success": False,
+            "error": str(e)
+        }
 
-async def handle_price(ctx: Context, token: str) -> str:
-    """Get token price from CoinMarketCap"""
+async def handle_price(ctx: Context, token: str) -> dict:
+    """Get token price from CoinMarketCap - returns structured data"""
     ctx.logger.info(f"💵 Fetching price for {token}")
 
     if not CMC_API_KEY:
-        return "❌ CoinMarketCap API key not configured"
+        return {
+            "success": False,
+            "error": "CoinMarketCap API key not configured"
+        }
 
     try:
         async with httpx.AsyncClient(timeout=15.0, follow_redirects=True) as client:
@@ -443,57 +658,324 @@ async def handle_price(ctx: Context, token: str) -> str:
                 headers={"X-CMC_PRO_API_KEY": CMC_API_KEY}
             )
             if response.status_code != 200:
-                return f"❌ CoinMarketCap API error: {response.status_code}"
+                return {
+                    "success": False,
+                    "error": f"CoinMarketCap API error (status {response.status_code})"
+                }
 
             data = response.json()
             token_data = data["data"][token.upper()]
             quote = token_data["quote"]["USD"]
 
-            price = quote["price"]
-            change_24h = quote["percent_change_24h"]
-            volume_24h = quote["volume_24h"]
-            market_cap = quote["market_cap"]
-
-            change_emoji = "📈" if change_24h > 0 else "📉"
-            response_text = f"{change_emoji} {token.upper()} Price Information\n\n💰 Current Price: ${price:.4f}\n📊 24h Change: {change_24h:+.2f}%\n📈 24h Volume: ${volume_24h:,.0f}\n💎 Market Cap: ${market_cap:,.0f}\n\nData from CoinMarketCap"
-
-            ctx.logger.info(f"✅ Price retrieved: ${price:.4f}")
-            return response_text
+            ctx.logger.info(f"✅ Price retrieved: ${quote['price']:.4f}")
+            return {
+                "success": True,
+                "data": {
+                    "token": token.upper(),
+                    "price": quote["price"],
+                    "percent_change_24h": quote["percent_change_24h"],
+                    "volume_24h": quote["volume_24h"],
+                    "market_cap": quote["market_cap"]
+                }
+            }
     except httpx.TimeoutException:
-        return "❌ Request timed out. Please try again!"
+        return {
+            "success": False,
+            "error": "Request timed out. Please try again!"
+        }
     except Exception as e:
         ctx.logger.error(f"❌ Price error: {e}")
-        return f"❌ Error fetching price. Please try again!"
+        return {
+            "success": False,
+            "error": "Error fetching price. Please try again!"
+        }
+
+async def handle_crypto_news(ctx: Context, query: Optional[str] = None) -> dict:
+    """Fetch crypto/DeFi news from X (Twitter) - returns structured data"""
+    ctx.logger.info(f"📰 Fetching crypto news...")
+
+    if not X_BEARER_TOKEN:
+        return {
+            "success": False,
+            "error": "X API not configured"
+        }
+
+    # Define search query
+    search_query = query if query else "crypto OR DeFi OR SUI OR blockchain"
+
+    # Check cache first (15-minute TTL to work with free tier: 1 request/15min)
+    cached_data = get_cached_news(search_query)
+    if cached_data:
+        ctx.logger.info(f"💾 Serving cached news for query: '{search_query}'")
+        return {
+            "success": True,
+            "data": cached_data,
+            "cached": True
+        }
+
+    try:
+
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            response = await client.get(
+                "https://api.twitter.com/2/tweets/search/recent",
+                params={
+                    "query": f"{search_query} -is:retweet lang:en",
+                    "max_results": 10,
+                    "tweet.fields": "created_at,public_metrics,author_id",
+                    "expansions": "author_id",
+                    "user.fields": "name,username,verified"
+                },
+                headers={"Authorization": f"Bearer {X_BEARER_TOKEN}"}
+            )
+
+            if response.status_code == 429:
+                return {
+                    "success": False,
+                    "error": "Rate limit reached. X API allows limited requests per 15 minutes. Please try again later!"
+                }
+            elif response.status_code != 200:
+                return {
+                    "success": False,
+                    "error": f"X API error (status {response.status_code})"
+                }
+
+            data = response.json()
+            tweets = data.get("data", [])
+            users = {user["id"]: user for user in data.get("includes", {}).get("users", [])}
+
+            if not tweets:
+                return {
+                    "success": True,
+                    "data": {
+                        "tweets": [],
+                        "count": 0,
+                        "message": "No recent tweets found"
+                    }
+                }
+
+            # Format tweets
+            formatted_tweets = []
+            for tweet in tweets[:5]:  # Limit to top 5
+                author = users.get(tweet["author_id"], {})
+                formatted_tweets.append({
+                    "text": tweet["text"],
+                    "author": author.get("name", "Unknown"),
+                    "username": author.get("username", "unknown"),
+                    "verified": author.get("verified", False),
+                    "likes": tweet.get("public_metrics", {}).get("like_count", 0),
+                    "retweets": tweet.get("public_metrics", {}).get("retweet_count", 0),
+                    "created_at": tweet.get("created_at", "")
+                })
+
+            # Prepare response data
+            response_data = {
+                "tweets": formatted_tweets,
+                "count": len(formatted_tweets),
+                "query": search_query
+            }
+
+            # Cache the result (15-minute TTL)
+            cache_news(search_query, response_data)
+            ctx.logger.info(f"✅ Retrieved {len(formatted_tweets)} tweets (cached for 15min)")
+
+            return {
+                "success": True,
+                "data": response_data
+            }
+    except httpx.TimeoutException as e:
+        ctx.logger.error(f"❌ X API timeout after 15s: {e}")
+        return {
+            "success": False,
+            "error": "X API request timed out. Please try again!"
+        }
+    except httpx.HTTPError as e:
+        ctx.logger.error(f"❌ X API HTTP error: {e}")
+        return {
+            "success": False,
+            "error": f"X API connection error: {str(e)}"
+        }
+    except Exception as e:
+        ctx.logger.error(f"❌ News fetch error: {e}")
+        import traceback
+        ctx.logger.error(traceback.format_exc())
+        return {
+            "success": False,
+            "error": f"Error fetching news: {str(e)}"
+        }
+
+def analyze_sentiment(tweets: list) -> dict:
+    """Analyze sentiment from tweets using keyword matching"""
+    if not tweets:
+        return {"sentiment": "neutral", "bullish": 0, "bearish": 0, "neutral": 0}
+
+    bullish_keywords = ["bullish", "moon", "pump", "buy", "long", "up", "gain", "profit", "growth", "rally", "🚀", "📈", "💎", "🔥", "💪"]
+    bearish_keywords = ["bearish", "dump", "sell", "short", "down", "loss", "crash", "drop", "fall", "decline", "📉", "💩", "⚠️", "😰"]
+
+    bullish_count = 0
+    bearish_count = 0
+    neutral_count = 0
+
+    for tweet in tweets:
+        text_lower = tweet.get("text", "").lower()
+
+        # Count keyword occurrences
+        bull_matches = sum(1 for keyword in bullish_keywords if keyword in text_lower)
+        bear_matches = sum(1 for keyword in bearish_keywords if keyword in text_lower)
+
+        if bull_matches > bear_matches:
+            bullish_count += 1
+        elif bear_matches > bull_matches:
+            bearish_count += 1
+        else:
+            neutral_count += 1
+
+    total = len(tweets)
+    overall_sentiment = "neutral"
+
+    if bullish_count > bearish_count and bullish_count > total * 0.4:
+        overall_sentiment = "bullish"
+    elif bearish_count > bullish_count and bearish_count > total * 0.4:
+        overall_sentiment = "bearish"
+
+    return {
+        "sentiment": overall_sentiment,
+        "bullish": bullish_count,
+        "bearish": bearish_count,
+        "neutral": neutral_count,
+        "bullish_percent": round((bullish_count / total) * 100, 1) if total > 0 else 0,
+        "bearish_percent": round((bearish_count / total) * 100, 1) if total > 0 else 0
+    }
+
+async def handle_market_research(ctx: Context, token: Optional[str] = None, category: Optional[str] = None) -> dict:
+    """Comprehensive market research combining price, news, and sentiment"""
+    ctx.logger.info(f"🔬 Market research: token={token}, category={category}")
+
+    research_data = {
+        "token": token,
+        "category": category,
+        "timestamp": datetime.now(timezone.utc).isoformat()
+    }
+
+    # 1. Get price data if token specified
+    if token and CMC_API_KEY:
+        price_result = await handle_price(ctx, token)
+        if price_result.get("success"):
+            research_data["price"] = price_result["data"]
+
+    # 2. Get relevant tweets with sentiment
+    if X_BEARER_TOKEN:
+        # Build search query
+        if token:
+            search_query = f"{token} crypto"
+        elif category:
+            search_query = f"{category} crypto"
+        else:
+            search_query = "crypto trending"
+
+        ctx.logger.info(f"📡 Calling X API with query: {search_query}")
+        news_result = await handle_crypto_news(ctx, search_query)
+        ctx.logger.info(f"📡 X API returned: success={news_result.get('success')}")
+
+        if news_result.get("success"):
+            tweets = news_result["data"]["tweets"]
+            research_data["news"] = {
+                "tweets": tweets,
+                "count": len(tweets)
+            }
+
+            # Analyze sentiment
+            ctx.logger.info(f"🔍 Analyzing sentiment for {len(tweets)} tweets")
+            sentiment = analyze_sentiment(tweets)
+            research_data["sentiment"] = sentiment
+        else:
+            ctx.logger.warning(f"⚠️ X API failed: {news_result.get('error')}")
+            # Add helpful context for LLM fallback
+            research_data["api_status"] = {
+                "news_available": False,
+                "reason": news_result.get('error', 'Unknown error'),
+                "fallback_mode": True
+            }
+            # Check if it's cached data
+            if news_result.get('cached'):
+                research_data["api_status"]["note"] = "Using cached news data from earlier"
+
+    # 3. Always return what we have (even if partial)
+    has_data = "price" in research_data or "news" in research_data
+
+    # Add API status info
+    research_data["available_data"] = {
+        "price_data": "price" in research_data,
+        "news_data": "news" in research_data,
+        "sentiment_data": "sentiment" in research_data
+    }
+
+    if not has_data:
+        # No real-time data - provide context for LLM to use built-in knowledge
+        research_data["fallback_mode"] = True
+        research_data["note"] = "Real-time data unavailable (APIs rate-limited or not configured). Use general crypto knowledge to help the user."
+        if token:
+            research_data["guidance"] = f"Provide general insights about {token} based on your knowledge: project overview, use cases, ecosystem, and general market position. Clarify that specific price/sentiment data isn't available right now."
+        elif category:
+            research_data["guidance"] = f"Provide general insights about {category} sector: what it is, notable projects, typical characteristics, and factors to consider. Clarify that specific real-time data isn't available right now."
+
+    ctx.logger.info(f"✅ Market research complete (price: {'price' in research_data}, news: {'news' in research_data})")
+    return {
+        "success": True,  # Always succeed, let LLM handle partial data
+        "data": research_data
+    }
 
 def generate_help_response(ctx: Context, user_query: str) -> str:
     """Generate dynamic help response using LLM or fallback"""
 
     # App description for LLM
     app_description = """
-Sui AI Assistant is an AI-powered Sui wallet assistant that helps users with DeFi operations on the Sui blockchain.
+Sui AI Assistant is an AI-powered custodial wallet assistant for the Sui blockchain.
 
-Capabilities:
-- Check wallet balance and get deposit address
-- Swap tokens (SUI, USDC, USDT) via Cetus DEX
-- Mint, view, and transfer NFTs
-- Check real-time cryptocurrency prices via CoinMarketCap
-- Natural language understanding for commands
+HOW IT WORKS:
+1. Each user gets a unique Sui deposit address managed by our backend
+2. Users send SUI tokens to their personal deposit address
+3. The backend monitors deposits and credits the user's account balance
+4. Users can then perform DeFi operations using their balance
 
-Examples:
-- "check my balance" - View your token balances
-- "swap 10 SUI to USDC" - Exchange tokens
-- "mint nft 'My Cool Art'" - Create a new NFT
+MAIN FEATURES:
+
+💰 BALANCE & DEPOSITS:
+- "check my balance" - View your current token balances
+- "deposit" or "how do I deposit" - Get your unique deposit address to fund your account
+- You must deposit SUI first before using other features
+
+🔄 TOKEN SWAPS:
+- "swap 10 SUI to USDC" - Exchange tokens via Cetus DEX
+- Supports: SUI, USDC, USDT
+- Uses your deposited balance
+
+🎨 NFT OPERATIONS:
+- "mint nft 'Art Name' with description 'Beautiful art' and image https://example.com/img.png" - Create NFT
 - "my nfts" - View your NFT collection
-- "price of SUI" - Get current market price
+- "transfer nft [id] to [address]" - Send NFT to another wallet
+
+💵 PRICE CHECKS:
+- "price of SUI" - Get real-time cryptocurrency prices from CoinMarketCap
+
+📰 CRYPTO NEWS:
+- "crypto news" or "what's happening in DeFi" - Get latest crypto/DeFi updates from X/Twitter
+- "news about SUI" - Search for specific token or topic news
+
+🔬 MARKET RESEARCH:
+- "analyze SUI" or "research SUI market" - Comprehensive analysis with price + news + sentiment
+- "research memecoins" - Category-based research with sentiment analysis
+- Combines price data, social media sentiment, and latest news for informed decisions
+
+KEY POINT: This is a custodial system. We manage the wallet for you. You deposit to YOUR unique address, and we handle all transactions on your behalf.
 """
 
     if not anthropic_client:
         # Fallback if no LLM available
-        return "👋 Hi! I'm Sui AI Assistant, your AI Sui wallet assistant!\n\nI can help with:\n💰 Balance & Deposits\n🔄 Token Swaps\n🎨 NFT Operations\n💵 Price Checks\n\nJust tell me what you want to do!"
+        return "👋 Hi! I'm Sui AI Assistant, your AI-powered custodial wallet for Sui blockchain!\n\n🏦 HOW IT WORKS:\nYou get a unique deposit address. Send SUI there, and I'll manage your wallet for you!\n\n✨ I CAN HELP WITH:\n💰 Balance & Deposits (ask for 'deposit address')\n🔄 Token Swaps (SUI, USDC, USDT)\n🎨 NFT Operations (mint, view, transfer)\n💵 Crypto Prices\n📰 Crypto News\n🔬 Market Research (analyze tokens with sentiment)\n\nJust tell me what you want to do!"
 
     try:
         response = anthropic_client.messages.create(
-            model="claude-3-5-sonnet-20241022",
+            model="claude-haiku-4-5-20251001",
             max_tokens=512,
             system=f"""You are Sui AI Assistant, a friendly AI assistant for Sui blockchain DeFi operations.
 
@@ -514,13 +996,26 @@ Format your response in a conversational way that matches the user's query tone.
 # CHAT HANDLERS
 # ============================================================================
 
+@agent.on_event("startup")
+async def startup(ctx: Context):
+    """Initialize agent on startup"""
+    ctx.logger.info("Agent started successfully")
+    ctx.logger.info(f"Agent address: {agent.address}")
+
 @chat_proto.on_message(ChatMessage)
 async def handle_chat_message(ctx: Context, sender: str, msg: ChatMessage):
     """Handle incoming chat messages"""
-    ctx.logger.info(f"📨 Received message from {sender[:12]}...")
+    try:
+        ctx.logger.info(f"📨 Received ChatMessage from {sender[:12]}...")
+        ctx.logger.info(f"Message ID: {msg.msg_id}")
 
-    # Send acknowledgement
-    await ctx.send(sender, create_acknowledgement(msg.msg_id))
+        # Send acknowledgement
+        await ctx.send(sender, create_acknowledgement(msg.msg_id))
+    except Exception as e:
+        ctx.logger.error(f"❌ Error in message handler: {e}")
+        import traceback
+        ctx.logger.error(traceback.format_exc())
+        raise
 
     # Extract user query
     user_query = extract_text_from_chat(msg)
@@ -529,86 +1024,273 @@ async def handle_chat_message(ctx: Context, sender: str, msg: ChatMessage):
 
     ctx.logger.info(f"💬 Query: {user_query}")
 
+    if not anthropic_client:
+        await ctx.send(sender, create_text_chat(
+            "❌ AI service not configured. Please contact administrator."
+        ))
+        return
+
     try:
-        # Parse intent
-        intent = parse_intent_with_llm(user_query)
-        action = intent["action"]
-        params = intent.get("parameters", {})
+        # Define available tools for Claude
+        tools = [
+            {
+                "name": "check_balance",
+                "description": "Check the user's wallet balance. Shows deposited SUI and other tokens.",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {},
+                    "required": []
+                }
+            },
+            {
+                "name": "get_deposit_address",
+                "description": "Get the user's unique deposit address. They need to send SUI to this address to fund their account.",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {},
+                    "required": []
+                }
+            },
+            {
+                "name": "swap_tokens",
+                "description": "Swap tokens using Cetus DEX. Supports SUI, USDC, USDT.",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "amount": {"type": "number", "description": "Amount to swap"},
+                        "from_token": {"type": "string", "description": "Source token (SUI, USDC, USDT)"},
+                        "to_token": {"type": "string", "description": "Destination token (SUI, USDC, USDT)"}
+                    },
+                    "required": ["amount", "from_token", "to_token"]
+                }
+            },
+            {
+                "name": "mint_nft",
+                "description": "Mint a new NFT on Sui blockchain. Extract parameters intelligently from user input - if they provide comma-separated values like 'meme, nice meme, img.png', parse them as name, description, image_url respectively.",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "nft_name": {"type": "string", "description": "Name of the NFT"},
+                        "description": {"type": "string", "description": "Description of the NFT"},
+                        "image_url": {"type": "string", "description": "URL of the NFT image (can be any string if user doesn't provide valid URL)"}
+                    },
+                    "required": ["nft_name", "description", "image_url"]
+                }
+            },
+            {
+                "name": "list_nfts",
+                "description": "List all NFTs owned by the user.",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {},
+                    "required": []
+                }
+            },
+            {
+                "name": "transfer_nft",
+                "description": "Transfer an NFT to another address.",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "nft_id": {"type": "string", "description": "ID of the NFT to transfer"},
+                        "recipient": {"type": "string", "description": "Recipient Sui address"}
+                    },
+                    "required": ["nft_id", "recipient"]
+                }
+            },
+            {
+                "name": "get_token_price",
+                "description": "Get current price and market data for a cryptocurrency token from CoinMarketCap.",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "token": {"type": "string", "description": "Token symbol (e.g., SUI, BTC, ETH)"}
+                    },
+                    "required": ["token"]
+                }
+            },
+            {
+                "name": "get_crypto_news",
+                "description": "Get latest crypto/DeFi news from X (Twitter). Can search for specific topics.",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "query": {"type": "string", "description": "Optional search query (e.g., 'SUI', 'memecoin', 'DeFi')"}
+                    },
+                    "required": []
+                }
+            },
+            {
+                "name": "research_market",
+                "description": "Comprehensive market research combining price data, news, and sentiment analysis. Perfect for questions like 'analyze SUI', 'research memecoins', or 'what's trending'.",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "token": {"type": "string", "description": "Specific token to research (e.g., 'SUI', 'BTC')"},
+                        "category": {"type": "string", "description": "Category to research (e.g., 'memecoin', 'DeFi', 'NFT')"}
+                    },
+                    "required": []
+                }
+            }
+        ]
 
-        ctx.logger.info(f"🎯 Action: {action}")
+        # System prompt
+        system_prompt = """You are Sui AI Assistant - a helpful AI for a custodial Sui blockchain wallet.
 
-        # Handle action
+CONTEXT:
+- Custodial wallet system - you manage wallets for users
+- Each user has a unique deposit address to fund their account
+- Users must deposit SUI first before swaps/NFT operations
+
+YOUR CAPABILITIES:
+You have tools to help users with:
+💰 Balance & Deposits - Check balance, get deposit address
+🔄 Token Swaps - Exchange SUI, USDC, USDT via Cetus DEX
+🎨 NFT Operations - Mint, view, transfer NFTs
+💵 Price Data - Real-time crypto prices from CoinMarketCap
+📰 Crypto News - Latest updates from X/Twitter
+🔬 Market Research - Comprehensive analysis with price + news + sentiment
+
+IMPORTANT PRINCIPLES:
+- Be proactive: When users ask about investing/trading/buying, immediately use research_market to gather data
+- Be helpful: Work with whatever data you get (even if partial). If some data is missing, acknowledge it but still provide value with what you have
+- Be responsible: Always include disclaimer that this is research data/information, not financial advice
+- Be direct: Don't ask for permission before using tools, just use them
+- Be adaptive: If real-time data APIs are unavailable (rate limited or errors), use your built-in knowledge about crypto trends, projects, and market dynamics. Provide general insights with clear disclaimers that the info may not be current
+- Use knowledge fallback: When APIs fail, don't just say "I can't help". Share what you know about crypto categories (DeFi, memecoins, L1s), notable projects, general market factors - just clarify the data isn't real-time
+- Be natural: Talk like a knowledgeable friend, not a corporate bot. Use conversational language, avoid excessive formatting/emojis, keep it flowing naturally
+- Parse casual input: When users provide comma-separated values or lists after you ask for parameters, extract them intelligently
+  Example: If you asked for NFT details and user says "meme, nice meme, https://example.com/img.png" → extract as name="meme", description="nice meme", image_url="https://example.com/img.png"
+  Even if they say "meme, nice meme, img" with incomplete URL, try to mint with what they give and explain if image URL is invalid
+
+FORMATTING RULES (CRITICAL):
+- Always put spaces around dollar amounts: "from $238k to $514k" NOT "from238k to$514k"
+- Use proper line breaks between sections: double newline (press enter twice)
+- Format lists with line breaks: put each item on a new line
+- Keep token names readable: "RATIO" not "**RATIO**"
+- Example good formatting:
+  "RATIO is showing activity with a reported 2.5x move recently (from $238k to $514k)
+
+  APR, AKT, EDU - various trading signals floating around"
+
+NOT: "**RATIO** − showingactivitywithareported2.5xmoverecently(from238kto$514k)"
+"""
+
+        # Call Claude with tools
+        response = anthropic_client.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=2048,
+            system=system_prompt,
+            tools=tools,
+            messages=[{"role": "user", "content": user_query}]
+        )
+
+        # Process response and execute tools
         response_text = ""
+        tool_results = []
 
-        if action == "balance":
-            response_text = await handle_balance(ctx, sender)
-        elif action == "deposit":
-            response_text = await handle_deposit(ctx, sender)
-        elif action == "swap":
-            if not all(k in params for k in ["amount", "from_token", "to_token"]):
-                response_text = "❌ I need the amount and both tokens for a swap.\nExample: 'swap 10 SUI to USDC'"
-            else:
-                response_text = await handle_swap(
-                    ctx, sender,
-                    params["from_token"],
-                    params["to_token"],
-                    params["amount"]
-                )
-        elif action == "nft_mint":
-            if "nft_name" not in params or not params["nft_name"]:
-                response_text = "🎨 Sure! To mint an NFT, I need:\n\n1️⃣ **Name**: What's the NFT called?\n2️⃣ **Description**: Tell me about it\n3️⃣ **Image URL**: Link to the image\n\nYou can tell me like:\n'mint nft \"Cool Art\" with description \"My awesome artwork\" and image https://example.com/image.png'\n\nOr just give me the name first, and I'll ask for the rest!"
-            elif "description" not in params or not params["description"]:
-                response_text = f"Great! You want to mint **{params['nft_name']}**\n\n📝 Now, what's the description for this NFT?"
-            elif "image_url" not in params or not params["image_url"]:
-                response_text = f"Perfect! Almost there...\n\n📸 What's the image URL for **{params['nft_name']}**?\n\n(Provide a direct link to an image)"
-            else:
-                response_text = await handle_nft_mint(
-                    ctx, sender,
-                    params["nft_name"],
-                    params["description"],
-                    params["image_url"]
-                )
-        elif action == "nft_list":
-            response_text = await handle_nft_list(ctx, sender)
-        elif action == "nft_transfer":
-            if "nft_id" not in params or "recipient" not in params:
-                response_text = "❌ Please provide both NFT ID and recipient address.\nExample: 'transfer nft 0xabc... to 0xdef...'"
-            else:
-                response_text = await handle_nft_transfer(
-                    ctx, sender,
-                    params["nft_id"],
-                    params["recipient"]
-                )
-        elif action == "price":
-            token = params.get("token", "SUI")
-            response_text = await handle_price(ctx, token)
-        elif action == "help":
-            response_text = generate_help_response(ctx, user_query)
-        else:
-            # Handle conversational queries more flexibly
-            query_lower = user_query.lower()
-            if any(word in query_lower for word in ["hi", "hello", "hey", "greetings"]):
-                response_text = "👋 Hi there! I'm Sui AI Assistant, your AI Sui wallet assistant.\n\nI can help you with DeFi operations on Sui blockchain!\n\nType 'help' to see what I can do, or just tell me what you'd like to do in natural language! 🚀"
-            elif any(word in query_lower for word in ["thanks", "thank you", "thx"]):
-                response_text = "You're welcome! 😊\n\nNeed anything else? Just ask!"
-            elif any(word in query_lower for word in ["can you", "are you able", "do you"]):
-                response_text = "Yes! I can help with:\n\n💰 Balance & Deposits\n🔄 Token Swaps\n🎨 NFT Operations\n💵 Price Checks\n\nJust tell me what you'd like to do, or type 'help' for examples!"
-            else:
-                response_text = "I'm not quite sure what you'd like to do.\n\nI can help with:\n- Check balance: 'check my balance'\n- Token swaps: 'swap 10 SUI to USDC'\n- Mint NFTs: 'mint nft \"My Art\"'\n- View NFTs: 'my nfts'\n- Check prices: 'price of SUI'\n\nJust tell me what you want in natural language! Type 'help' for more examples."
+        for content_block in response.content:
+            if content_block.type == "text":
+                response_text = content_block.text
+            elif content_block.type == "tool_use":
+                tool_name = content_block.name
+                tool_input = content_block.input
+                tool_id = content_block.id
+
+                ctx.logger.info(f"🔧 Tool: {tool_name}")
+
+                # Execute tool
+                tool_result = None
+                try:
+                    if tool_name == "check_balance":
+                        tool_result = await handle_balance(ctx, sender)
+                    elif tool_name == "get_deposit_address":
+                        tool_result = await handle_deposit(ctx, sender)
+                    elif tool_name == "swap_tokens":
+                        tool_result = await handle_swap(
+                            ctx, sender,
+                            tool_input["from_token"],
+                            tool_input["to_token"],
+                            tool_input["amount"]
+                        )
+                    elif tool_name == "mint_nft":
+                        tool_result = await handle_nft_mint(
+                            ctx, sender,
+                            tool_input["nft_name"],
+                            tool_input["description"],
+                            tool_input["image_url"]
+                        )
+                    elif tool_name == "list_nfts":
+                        tool_result = await handle_nft_list(ctx, sender)
+                    elif tool_name == "transfer_nft":
+                        tool_result = await handle_nft_transfer(
+                            ctx, sender,
+                            tool_input["nft_id"],
+                            tool_input["recipient"]
+                        )
+                    elif tool_name == "get_token_price":
+                        tool_result = await handle_price(ctx, tool_input["token"])
+                    elif tool_name == "get_crypto_news":
+                        tool_result = await handle_crypto_news(ctx, tool_input.get("query"))
+                    elif tool_name == "research_market":
+                        tool_result = await handle_market_research(
+                            ctx,
+                            tool_input.get("token"),
+                            tool_input.get("category")
+                        )
+                except Exception as e:
+                    ctx.logger.error(f"❌ Tool error: {e}")
+                    tool_result = {
+                        "success": False,
+                        "error": str(e)
+                    }
+
+                tool_results.append({
+                    "type": "tool_result",
+                    "tool_use_id": tool_id,
+                    "content": json.dumps(tool_result)
+                })
+
+        # If tools were called, get final response from Claude
+        if tool_results:
+            final_response = anthropic_client.messages.create(
+                model="claude-haiku-4-5-20251001",
+                max_tokens=2048,
+                system=system_prompt,
+                tools=tools,
+                messages=[
+                    {"role": "user", "content": user_query},
+                    {"role": "assistant", "content": response.content},
+                    {"role": "user", "content": tool_results}
+                ]
+            )
+
+            # Extract text from final response
+            for content_block in final_response.content:
+                if content_block.type == "text":
+                    response_text = content_block.text
+                    break
 
         # Send response
-        await ctx.send(sender, create_text_chat(response_text))
+        if response_text:
+            await ctx.send(sender, create_text_chat(response_text))
+        else:
+            await ctx.send(sender, create_text_chat(
+                "I'm here to help! Ask me about balance, swaps, NFTs, prices, or crypto news."
+            ))
 
     except Exception as e:
         ctx.logger.error(f"❌ Error: {e}")
+        import traceback
+        traceback.print_exc()
         await ctx.send(sender, create_text_chat(
-            f"❌ Sorry, I encountered an error: {str(e)}\n\nPlease try again or type 'help' for assistance."
+            "❌ Sorry, I encountered an error. Please try again!"
         ))
 
 @chat_proto.on_message(ChatAcknowledgement)
 async def handle_acknowledgement(ctx: Context, sender: str, msg: ChatAcknowledgement):
     """Handle acknowledgement messages"""
-    ctx.logger.info(f"✅ Acknowledgement received")
+    ctx.logger.info(f"✅ Acknowledgement received from {sender[:12]}...")
 
 # Include protocol
 agent.include(chat_proto, publish_manifest=True)
