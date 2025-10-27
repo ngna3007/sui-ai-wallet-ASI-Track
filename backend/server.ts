@@ -1,5 +1,5 @@
 /**
- * SuiVisor PTB Backend API
+ * Sui AI Assistant Backend API
  * Connects to existing database and provides PTB transaction execution for agents
  */
 
@@ -39,6 +39,7 @@ app.use(express.json());
 const PORT = process.env.PORT || process.env.BACKEND_PORT || 3000;
 const SUI_NETWORK = process.env.SUI_NETWORK || 'testnet';
 const DATABASE_URL = process.env.DATABASE_URL;
+const API_KEY = process.env.API_KEY; // Secure API key for agent authentication
 
 // Connect to existing PostgreSQL database
 const sql = postgres(DATABASE_URL, {
@@ -47,21 +48,63 @@ const sql = postgres(DATABASE_URL, {
   connect_timeout: 10,
 });
 
-console.log('🚀 SuiVisor PTB Backend Starting...');
+console.log('🚀 Sui AI Assistant Backend Starting...');
 console.log(`📍 Network: ${SUI_NETWORK}`);
 console.log(`🗄️  Database: ${DATABASE_URL ? 'Connected' : 'Not configured'}`);
+console.log(`🔐 API Key: ${API_KEY ? 'Configured' : '⚠️  NOT SET - API is unsecured!'}`);
 
 /**
- * Health check
+ * API Key Authentication Middleware
+ * Protects all /api/* endpoints
+ */
+const apiKeyAuth = (req: express.Request, res: express.Response, next: express.NextFunction) => {
+  // Skip auth for health check
+  if (req.path === '/health') {
+    return next();
+  }
+
+  // Skip auth if no API key is configured (development mode)
+  if (!API_KEY) {
+    console.warn('⚠️  WARNING: No API key configured - allowing unauthenticated access');
+    return next();
+  }
+
+  // Check for API key in header
+  const providedKey = req.headers['x-api-key'] || req.headers['authorization']?.replace('Bearer ', '');
+
+  if (!providedKey) {
+    return res.status(401).json({
+      success: false,
+      error: 'Unauthorized: API key required. Provide via X-API-Key or Authorization header.',
+    });
+  }
+
+  if (providedKey !== API_KEY) {
+    return res.status(403).json({
+      success: false,
+      error: 'Forbidden: Invalid API key',
+    });
+  }
+
+  // Valid API key - proceed
+  next();
+};
+
+// Apply authentication middleware to all routes
+app.use(apiKeyAuth);
+
+/**
+ * Health check (public endpoint)
  */
 app.get('/health', (req, res) => {
   res.json({
     status: 'healthy',
-    service: 'SuiVisor PTB Backend',
+    service: 'Sui AI Assistant Backend',
     network: SUI_NETWORK,
     timestamp: Date.now(),
   });
 });
+
 
 /**
  * POST /api/create-ptb

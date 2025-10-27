@@ -7,6 +7,9 @@ uagents-core>=0.2.0
 # ASI Alliance Integration
 hyperon>=0.1.0  # MeTTa knowledge graph
 
+# AI / LLM
+anthropic>=0.42.0  # Anthropic Claude API for NLU
+
 # HTTP & API
 httpx>=0.27.0
 requests>=2.31.0

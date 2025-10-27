@@ -12,6 +12,9 @@ ENV/
 dist/
 build/
 
+# Test files
+test_*.py
+
 # Node.js
 node_modules/
 npm-debug.log
@@ -39,10 +42,9 @@ Thumbs.db
 dist/
 *.tsbuildinfo
 
-# Documentation (exclude markdown docs except README and DEPLOYMENT)
+# Documentation (exclude markdown docs except README)
 *.md
 !README.md
-!DEPLOYMENT.md
 
 # Logs
 *.log
@@ -52,3 +54,4 @@ backend/server.ts.backup
 ptb_registry.csv
 ptb_registry.csv:Zone.Identifier
 backend/tests/
+.claude/
