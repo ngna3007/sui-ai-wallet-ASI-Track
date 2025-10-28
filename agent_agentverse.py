@@ -1305,7 +1305,7 @@ NOT: "**RATIO** − showingactivitywithareported2.5xmoverecently(from238kto$514k
                     elif tool_name == "execute_atomic_transaction":
                         tool_result = await handle_atomic_transaction(
                             ctx,
-                            user_address,
+                            sender,
                             tool_input["intent"]
                         )
                 except Exception as e:
