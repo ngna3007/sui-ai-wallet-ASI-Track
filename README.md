@@ -16,10 +16,9 @@
 
 ### **Primary Agent (Agentverse)**
 - **Agent Name:** `suivisor`
-- **Agent Address:** `agent1qfn954mwxwcr54g0qdd3f3gypxfhc2kqdqj5pkjx22zpcutr2p7sqzdj2rm`
-- **Test Wallet Address:** `0x7c10d052a3aacebdfeb3d53cb7c779f7a1897949a52cfa435fb624c0e7ea4a1c`
+- **Agent Address:** `agent1qfn954mwxwcr54g0qdd3f3gypxfhc2kqdqj5pkjx22zpcutr2p7sqzdj2rm` (agenverse.ai)
 - **Network:** Sui Testnet
-- **Backend:** Railway-hosted TypeScript backend
+- **Backend:** Render-hosted TypeScript backend
 - **ASI:One Compatible:** ✅ Yes
 - **Chat Protocol:** ✅ Enabled
 - **Real Transactions:** ✅ Live on testnet
@@ -187,13 +186,6 @@ User can query/transfer NFT anytime
 - **PTB Registry**: Extensible template library
 - **Natural Language**: Plain English commands
 - **Context Awareness**: Maintains conversation state
-
-### ✅ Production Ready
-- **Error Handling**: Comprehensive logging and recovery
-- **Database Transactions**: ACID compliance with Drizzle ORM
-- **Health Monitoring**: Health check endpoints
-- **Testing**: 11/11 endpoint tests passing
-- **Security**: Input validation, SQL injection protection
 
 ---
 
@@ -457,8 +449,6 @@ NODE_ENV=development
 ---
 
 ## 🚢 Deployment
-
-> **📖 See [DEPLOYMENT.md](./DEPLOYMENT.md) for comprehensive step-by-step deployment guide**
 
 ### Current Setup
 - **Backend**: Railway (auto-deploy from GitHub)
