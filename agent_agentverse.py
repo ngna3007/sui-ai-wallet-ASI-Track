@@ -992,6 +992,59 @@ Format your response in a conversational way that matches the user's query tone.
         # Fallback message
         return "👋 Hi! I'm Sui AI Assistant, your AI Sui wallet assistant!\n\nI can help with:\n💰 Balance & Deposits\n🔄 Token Swaps\n🎨 NFT Operations\n💵 Price Checks\n\nJust tell me what you want to do!"
 
+async def handle_atomic_transaction(ctx: Context, user_address: str, intent: str) -> dict:
+    """Execute multiple operations atomically using /api/create-ptb endpoint"""
+    ctx.logger.info(f"⚛️ Atomic transaction: {intent}")
+
+    try:
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            response = await client.post(
+                f"{BACKEND_URL}/api/create-ptb",
+                headers=get_backend_headers(),
+                json={
+                    "userIntent": intent,
+                    "walletAddress": user_address
+                }
+            )
+
+            data = response.json()
+
+            if response.status_code == 200 and data.get("success"):
+                tx_hash = data.get("transactionHash")
+                template_name = data.get("templateName", "Unknown")
+                mode = data.get("mode", "single")
+
+                result = {
+                    "success": True,
+                    "transaction_hash": tx_hash,
+                    "explorer_url": f"https://testnet.suivision.xyz/txblock/{tx_hash}",
+                    "template": template_name,
+                    "mode": mode
+                }
+
+                # Add multi-op specific info if available
+                if mode == "multi-operation":
+                    result["operation_count"] = data.get("operationCount", 0)
+                    result["operations"] = data.get("operations", [])
+                    result["effects"] = data.get("effects", [])
+
+                ctx.logger.info(f"✅ Atomic transaction successful: {tx_hash}")
+                return result
+            else:
+                error_msg = data.get("error", "Unknown error")
+                ctx.logger.error(f"❌ Atomic transaction failed: {error_msg}")
+                return {
+                    "success": False,
+                    "error": error_msg
+                }
+
+    except Exception as e:
+        ctx.logger.error(f"❌ Error executing atomic transaction: {e}")
+        return {
+            "success": False,
+            "error": str(e)
+        }
+
 # ============================================================================
 # CHAT HANDLERS
 # ============================================================================
@@ -1131,6 +1184,17 @@ async def handle_chat_message(ctx: Context, sender: str, msg: ChatMessage):
                     },
                     "required": []
                 }
+            },
+            {
+                "name": "execute_atomic_transaction",
+                "description": "Execute multiple blockchain operations atomically in a single transaction (all succeed or all fail). Use this when user requests multiple operations like 'mint NFT and transfer it', 'transfer SUI twice', or any scenario where operations must happen together. Do NOT use for single operations.",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "intent": {"type": "string", "description": "Natural language describing all operations to execute atomically (e.g., 'mint NFT called Art with description My Art and image url.png, then transfer 0.01 SUI to 0x123...')"}
+                    },
+                    "required": ["intent"]
+                }
             }
         ]
 
@@ -1237,6 +1301,12 @@ NOT: "**RATIO** − showingactivitywithareported2.5xmoverecently(from238kto$514k
                             ctx,
                             tool_input.get("token"),
                             tool_input.get("category")
+                        )
+                    elif tool_name == "execute_atomic_transaction":
+                        tool_result = await handle_atomic_transaction(
+                            ctx,
+                            user_address,
+                            tool_input["intent"]
                         )
                 except Exception as e:
                     ctx.logger.error(f"❌ Tool error: {e}")
