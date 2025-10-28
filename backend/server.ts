@@ -25,6 +25,11 @@ import {
 } from './lib/services/user-manager.js';
 import { db, schema } from './db/drizzle-client.js';
 import { eq, and } from 'drizzle-orm';
+import {
+  extractOperationIntents,
+  generateCombinedTypescriptCode,
+  generateEffectDescription,
+} from './lib/services/multi-op-handler.js';
 
 // Load environment from parent directory
 config({ path: '../.env' });
@@ -146,12 +151,12 @@ app.post('/api/create-ptb', async (req, res) => {
       `;
       template = result[0];
     } else {
-      // Semantic search with Voyage AI embeddings
+      // Multi-operation detection and processing
       console.log(`🔍 [PTB] Analyzing intent: "${userIntent}"`);
 
-      // Generate embedding for user intent
-      const intentEmbedding = await calculateEmbedding(userIntent);
-      console.log(`🧠 [PTB] Generated embedding (${intentEmbedding.length} dimensions)`);
+      // Step 1: Use LLM to detect multiple operations
+      const operationQueries = await extractOperationIntents(userIntent);
+      console.log(`🔍 [PTB] Detected ${operationQueries.length} operation(s):`, operationQueries);
 
       // Fetch all active templates with embeddings
       const allTemplates = await sql`
@@ -176,33 +181,57 @@ app.post('/api/create-ptb', async (req, res) => {
 
       console.log(`🔍 [PTB] Comparing against ${templates.length} templates`);
 
-      // Find most similar templates
-      const matches = findSimilarPTBs(intentEmbedding, templates, 0.5, 5);
+      // Step 2: For each operation, find best matching template
+      const detectedOperations: Array<{ template: any; extractedParams: any; operation: string }> = [];
 
-      if (matches.length === 0) {
+      for (const operationQuery of operationQueries) {
+        console.log(`🔍 [PTB] Searching template for: "${operationQuery}"`);
+
+        // Generate embedding for this operation
+        const opEmbedding = await calculateEmbedding(operationQuery);
+
+        // Find best matching template for this operation
+        const matches = findSimilarPTBs(opEmbedding, templates, 0.5, 5);
+
+        if (matches.length === 0) {
+          console.warn(`⚠️  No template found for operation: "${operationQuery}"`);
+          continue;
+        }
+
+        const bestMatch = matches[0].ptb;
+        const similarity = matches[0].similarity;
+        console.log(`✅ [PTB] Matched: ${bestMatch.name} (similarity: ${similarity.toFixed(3)})`);
+
+        // Extract parameters for this operation
+        const params = await extractParametersWithLLM(userIntent, bestMatch);
+
+        detectedOperations.push({
+          template: bestMatch,
+          extractedParams: params,
+          operation: operationQuery,
+        });
+      }
+
+      if (detectedOperations.length === 0) {
         return res.status(404).json({
           success: false,
-          error: `No matching PTB template found for: "${userIntent}"`,
+          error: `No matching PTB templates found for: "${userIntent}"`,
           suggestion: 'Try rephrasing your request or be more specific',
         });
       }
 
-      template = matches[0].ptb;
-      const similarity = matches[0].similarity;
-      console.log(`✅ [PTB] Found: ${template.name} (similarity: ${similarity.toFixed(3)})`);
+      // Store detected operations for later use
+      req.detectedOperations = detectedOperations;
 
-      // Log top 3 matches for debugging
-      if (matches.length > 1) {
-        console.log('   Other matches:');
-        matches.slice(1, 3).forEach((m: any, i: number) => {
-          console.log(`   ${i + 2}. ${m.ptb.name} (${m.similarity.toFixed(3)})`);
-        });
-      }
+      // For backward compatibility: set template to first operation's template
+      template = detectedOperations[0].template;
     }
 
-    // Extract parameters using LLM
-    const inputs = await extractParametersWithLLM(userIntent, template);
-    console.log('🔧 [PTB] Inputs:', inputs);
+    // Check if multi-operation detected
+    const isMultiOp = req.detectedOperations && req.detectedOperations.length > 1;
+
+    let inputs: any;
+    let builtTx: any;
 
     // Build transaction
     const rpcUrl = SUI_NETWORK === 'mainnet'
@@ -212,25 +241,89 @@ app.post('/api/create-ptb', async (req, res) => {
     const client = new SuiClient({ url: rpcUrl });
     const tx = new Transaction();
 
-    if (!template.typescriptCode) {
-      return res.status(400).json({
-        success: false,
-        error: 'Template has no code',
-      });
+    if (isMultiOp) {
+      // Multi-operation: Build combined atomic transaction
+      console.log(`⚙️ [PTB] Building combined transaction with ${req.detectedOperations.length} operations...`);
+
+      const allParams: Record<string, any> = {};
+      const effects: string[] = [];
+      const operationNames: string[] = [];
+
+      // Collect all parameters and generate combined code
+      for (const operation of req.detectedOperations) {
+        const { template: opTemplate, extractedParams } = operation;
+        operationNames.push(opTemplate.name);
+
+        // Filter out mock values
+        const cleanParams = Object.fromEntries(
+          Object.entries(extractedParams).filter(([_key, value]) => {
+            if (typeof value === 'string') {
+              const isMockValue =
+                value.includes('0x00000000') ||
+                value === 'string' ||
+                value.includes('placeholder') ||
+                value.includes('mock');
+              return !isMockValue;
+            }
+            return true;
+          }),
+        );
+
+        Object.assign(allParams, cleanParams);
+
+        // Generate effect description
+        effects.push(generateEffectDescription(opTemplate, extractedParams));
+      }
+
+      // Generate combined TypeScript code
+      const combinedCode = generateCombinedTypescriptCode(
+        req.detectedOperations.map((op: any) => op.template)
+      );
+
+      console.log(`🔧 [PTB] Combined operations: ${operationNames.join(' + ')}`);
+      console.log(`🔧 [PTB] Combined parameters:`, allParams);
+
+      // Execute combined code
+      const executeCode = new Function(
+        'tx',
+        'inputs',
+        'userAddress',
+        `${combinedCode}\nreturn tx;`
+      );
+
+      builtTx = executeCode(tx, allParams, walletAddress);
+      inputs = allParams;
+
+      console.log(`✅ [PTB] Combined transaction built (${req.detectedOperations.length} operations)`);
+      console.log(`   Effects: ${effects.join(', ')}`);
+
+      // Store effects for response
+      req.transactionEffects = effects;
+    } else {
+      // Single operation: Use existing logic
+      inputs = await extractParametersWithLLM(userIntent, template);
+      console.log('🔧 [PTB] Inputs:', inputs);
+
+      if (!template.typescriptCode) {
+        return res.status(400).json({
+          success: false,
+          error: 'Template has no code',
+        });
+      }
+
+      console.log('⚙️ [PTB] Building transaction...');
+
+      const executeCode = new Function(
+        'tx',
+        'inputs',
+        'userAddress',
+        `${template.typescriptCode}\nreturn tx;`
+      );
+
+      builtTx = executeCode(tx, inputs, walletAddress);
+
+      console.log('✅ [PTB] Transaction built');
     }
-
-    console.log('⚙️ [PTB] Building transaction...');
-
-    const executeCode = new Function(
-      'tx',
-      'inputs',
-      'userAddress',
-      `${template.typescriptCode}\nreturn tx;`
-    );
-
-    const builtTx = executeCode(tx, inputs, walletAddress);
-
-    console.log('✅ [PTB] Transaction built');
 
     // Sign and execute transaction with agent wallet
     console.log('🔏 [PTB] Signing and executing...');
@@ -256,10 +349,18 @@ app.post('/api/create-ptb', async (req, res) => {
       success: true,
       transactionHash: result.digest,
       gasUsed,
-      templateName: template.name,
+      templateName: isMultiOp
+        ? `Combined: ${req.detectedOperations.map((op: any) => op.template.name).join(' + ')}`
+        : template.name,
       templateId: template.id,
       inputs,
       explorerUrl: `https://suiscan.xyz/${SUI_NETWORK}/tx/${result.digest}`,
+      ...(isMultiOp && {
+        mode: 'multi-operation',
+        operationCount: req.detectedOperations.length,
+        operations: req.detectedOperations.map((op: any) => op.operation),
+        effects: req.transactionEffects,
+      }),
     });
 
   } catch (error) {
