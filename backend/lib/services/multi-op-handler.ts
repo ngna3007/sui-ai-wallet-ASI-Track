@@ -138,6 +138,11 @@ ${template.typescriptCode}`;
   const combinedCode = `// Combined PTB with ${templates.length} operations
 // Generated automatically to ensure transaction integrity
 
+// Fix for template compatibility: Add tx.Object alias
+if (!tx.Object && tx.object) {
+  tx.Object = tx.object;
+}
+
 // Parse array parameters that might come as comma-separated strings
 console.log('Raw inputs received:', JSON.stringify(inputs, null, 2));
 
