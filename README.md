@@ -1,4 +1,4 @@
-# 🤖 SuiVisor - AI-Powered Multi-User Wallet for Sui Blockchain
+# 🤖 Sui AI Assistant: An Autonomous Agent for Natural Language Interaction with the Sui Blockchain
 
 ![tag:innovationlab](https://img.shields.io/badge/innovationlab-3D8BD3)
 ![tag:hackathon](https://img.shields.io/badge/hackathon-5F43F1)
@@ -15,8 +15,8 @@
 ## 🌟 Agent Information
 
 ### **Primary Agent (Agentverse)**
-- **Agent Name:** `suivisor`
-- **Agent Address:** `agent1qfn954mwxwcr54g0qdd3f3gypxfhc2kqdqj5pkjx22zpcutr2p7sqzdj2rm` (agenverse.ai)
+- **Agent Name:** `Sui AI Assistant`
+- **Agent Address:** `agent1qfn954mwxwcr54g0qdd3f3gypxfhc2kqdqj5pkjx22zpcutr2p7sqzdj2rm` (agentverse.ai)
 - **Network:** Sui Testnet
 - **Backend:** Render-hosted TypeScript backend
 - **ASI:One Compatible:** ✅ Yes
@@ -36,9 +36,9 @@
 
 ## 🎯 Overview
 
-**SuiVisor** is a production-ready multi-user custodial wallet system that enables Fetch.ai agents to execute real blockchain transactions on Sui. Built for the ASI Alliance Hackathon, it bridges AI agent communication with DeFi operations through a hybrid architecture.
+**Sui AI Assistant** is a production-ready multi-user custodial wallet system that enables Fetch.ai agents to execute real blockchain transactions on Sui. Built for the ASI Alliance Hackathon, it bridges AI agent communication with DeFi operations through a hybrid architecture.
 
-### What Makes SuiVisor Special?
+### What Makes Sui AI Assistant Special?
 
 - **🔐 Multi-User Custodial Architecture**: Each agent gets unique deposit address, single backend manages all transactions
 - **💱 Real DeFi Operations**: Live token swaps via Cetus DEX, NFT minting/transfers on Sui testnet
@@ -62,7 +62,7 @@
 
 ### Multi-User Wallet System (Option 3 Hybrid)
 
-SuiVisor implements a hybrid custodial architecture optimized for AI agents:
+Sui AI Assistant implements a hybrid custodial architecture optimized for AI agents:
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -218,7 +218,7 @@ User can query/transfer NFT anytime
 ## 🛠️ Project Structure
 
 ```
-suivisor/
+Sui AI Assistant/
 ├── backend/                          # TypeScript backend service
 │   ├── server.ts                     # Express API server
 │   ├── lib/
@@ -466,7 +466,7 @@ NODE_ENV=development
    ```
 
 2. **Configure Agentverse**:
-   - Copy `suivisor_agent.py` to Agentverse
+   - Copy `Sui AI Assistant_agent.py` to Agentverse
    - Add environment variables (BACKEND_URL, API keys)
    - Enable mailbox and get mailbox key
    - Deploy agent
