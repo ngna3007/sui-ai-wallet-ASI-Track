@@ -1,32 +1,32 @@
 /**
- * Embeddings service using Google Gemini or Voyage AI
+ * Embeddings service using Voyage AI or Google Gemini
  * Integrated from ai-wallet-main for improved PTB search
  */
 
-// Primary embedding function - tries Gemini first, falls back to Voyage AI
+// Primary embedding function - tries Voyage AI first, falls back to Gemini
 export async function calculateEmbedding(text: string): Promise<number[]> {
   const hasVoyage = !!process.env.VOYAGE_API_KEY;
   const hasGemini = !!process.env.GOOGLE_API_KEY;
 
   if (!hasVoyage && !hasGemini) {
-    throw new Error('Either GOOGLE_API_KEY or VOYAGE_API_KEY is required for embedding generation');
+    throw new Error('Either VOYAGE_API_KEY or GOOGLE_API_KEY is required for embedding generation');
   }
 
   let embedding: number[];
 
-  // Try Gemini first if available
-  if (hasGemini) {
+  // Try Voyage AI first if available
+  if (hasVoyage) {
     try {
-      console.log('Using Google Gemini for embedding generation');
-      embedding = await generateGeminiEmbedding(text);
-    } catch (error: any) {
-      console.warn('Gemini failed, trying Voyage AI fallback:', error.message);
-      if (!hasVoyage) throw error;
+      console.log('Using Voyage AI for embedding generation');
       embedding = await generateVoyageEmbedding(text);
+    } catch (error: any) {
+      console.warn('Voyage AI failed, trying Gemini fallback:', error.message);
+      if (!hasGemini) throw error;
+      embedding = await generateGeminiEmbedding(text);
     }
   } else {
-    console.log('Using Voyage AI for embedding generation');
-    embedding = await generateVoyageEmbedding(text);
+    console.log('Using Google Gemini for embedding generation');
+    embedding = await generateGeminiEmbedding(text);
   }
 
   // Validate dimensions
@@ -62,7 +62,7 @@ async function generateVoyageEmbedding(text: string): Promise<number[]> {
   return data.data[0].embedding;
 }
 
-// Google Gemini embedding generation (text-embedding-004 with padding to 1536 dimensions)
+// Google Gemini embedding generation (text-embedding-004 with native output)
 async function generateGeminiEmbedding(text: string): Promise<number[]> {
   const response = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/text-embedding-004:embedContent?key=${process.env.GOOGLE_API_KEY}`,
@@ -76,7 +76,7 @@ async function generateGeminiEmbedding(text: string): Promise<number[]> {
         content: {
           parts: [{ text }],
         },
-        outputDimensionality: 768, // Max supported by text-embedding-004
+        // Don't specify outputDimensionality to get the full native dimensions
       }),
     }
   );
@@ -89,14 +89,21 @@ async function generateGeminiEmbedding(text: string): Promise<number[]> {
   const data = await response.json() as any;
   const embedding = data.embedding.values as number[];
 
-  // Pad to 1536 dimensions to match Voyage AI (pad with zeros)
-  if (embedding.length < 1536) {
-    console.log(`⚠️  Padding Gemini embedding from ${embedding.length} to 1536 dimensions`);
-    const padded = new Array(1536).fill(0);
-    for (let i = 0; i < embedding.length; i++) {
-      padded[i] = embedding[i];
+  console.log(`✅ Gemini embedding generated: ${embedding.length} dimensions`);
+  
+  // If embedding is not 1536, we need to handle it
+  if (embedding.length !== 1536) {
+    console.log(`⚠️  Warning: Gemini returned ${embedding.length} dimensions, expected 1536`);
+    // Pad to 1536 if needed
+    if (embedding.length < 1536) {
+      const padded = new Array(1536).fill(0);
+      for (let i = 0; i < embedding.length; i++) {
+        padded[i] = embedding[i];
+      }
+      return padded;
     }
-    return padded;
+    // Truncate if too large
+    return embedding.slice(0, 1536);
   }
 
   return embedding;
