@@ -73,7 +73,7 @@ Analyze the following user input and provide the JSON output.
     console.log('🧠 [Multi-Op] Using Anthropic Claude for intent extraction');
 
     const { text } = await generateText({
-      model: anthropic('claude-3-5-sonnet-20241022'),
+      model: anthropic('claude-haiku-4-5-20251001'),
       prompt: extractionPrompt,
     });
 
@@ -138,7 +138,7 @@ ${template.typescriptCode}`;
   const combinedCode = `// Combined PTB with ${templates.length} operations
 // Generated automatically to ensure transaction integrity
 
-// Fix for template compatibility: Add tx.Object alias
+// Fix for template compatibility: Add tx.Object alias for older templates
 if (!tx.Object && tx.object) {
   tx.Object = tx.object;
 }
