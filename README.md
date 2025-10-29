@@ -8,8 +8,6 @@
 ![Sui](https://img.shields.io/badge/Sui-Blockchain-4DA2FF.svg)
 ![ASI Alliance](https://img.shields.io/badge/ASI-Alliance-0056FF.svg)
 
-> **Intelligent multi-user custodial wallet system enabling AI agents to execute real DeFi operations on Sui blockchain**
-
 ---
 
 ## 🌟 Agent Information
@@ -228,9 +226,9 @@ Sui AI Assistant/
 │   │   │   ├── ptb-service.ts        # Semantic search
 │   │   │   └── embeddings.ts         # Voyage AI embeddings
 │   │   ├── tools/
-│   │   │   ├── cetus-pool-discovery.ts
-│   │   │   ├── coin-info-discovery.ts
-│   │   │   └── get-sui-wallet-*.ts
+│   │   │   ├── cetus-pool-discovery.ts (plan)
+│   │   │   ├── coin-info-discovery.ts (plan)  - For complex ops where need fetched data for params
+│   │   │   └── get-sui-wallet-*.ts (plan)
 │   │   └── helpers/
 │   │       └── deposit-address.ts    # Address derivation
 │   ├── db/
@@ -457,163 +455,6 @@ NODE_ENV=development
 - **Network**: Sui Testnet
 - **Status**: ✅ All tests passing (8/8 local tests)
 
-### Quick Deploy
-
-1. **Deploy Backend** (Railway/Render/Fly.io):
-   ```bash
-   # See DEPLOYMENT.md for detailed instructions
-   railway up  # or render deploy, or fly deploy
-   ```
-
-2. **Configure Agentverse**:
-   - Copy `Sui AI Assistant_agent.py` to Agentverse
-   - Add environment variables (BACKEND_URL, API keys)
-   - Enable mailbox and get mailbox key
-   - Deploy agent
-
-3. **Test Integration**:
-   ```bash
-   # Local testing
-   python test_agent_local.py
-
-   # Production testing via ASI:One
-   # Send message to agent address
-   ```
-
-### Production Checklist
-- [x] Agent code updated to match backend API
-- [x] Local testing completed (8/8 tests passing)
-- [x] Deployment documentation created
-- [ ] Backend deployed to cloud platform
-- [ ] Agentverse agent deployed with mailbox
-- [ ] Environment variables configured
-- [ ] End-to-end testing on Agentverse
-- [ ] Enable API authentication (recommended)
-- [ ] Configure rate limiting (recommended)
-- [ ] Set up monitoring and alerting
-- [ ] Enable database backups
-- [ ] Restrict CORS origins
-- [ ] Secure API keys rotation policy
-
----
-
-## 🧩 Integration Examples
-
-### Python Agent (Fetch.ai)
-
-```python
-import httpx
-from uagents import Agent, Context, Model
-
-class SwapRequest(Model):
-    from_coin: str
-    to_coin: str
-    amount: float
-
-class SwapResponse(Model):
-    tx_hash: str
-    explorer_url: str
-
-wallet_agent = Agent(name="wallet_agent", seed="your_seed")
-
-@wallet_agent.on_message(model=SwapRequest)
-async def handle_swap(ctx: Context, sender: str, msg: SwapRequest):
-    """Execute token swap for user"""
-
-    response = await httpx.post(
-        "http://localhost:3000/api/swap",
-        json={
-            "userAddress": sender,  # agent1q...
-            "fromCoin": msg.from_coin,
-            "toCoin": msg.to_coin,
-            "amount": msg.amount,
-            "slippage": 0.01
-        },
-        timeout=30.0
-    )
-
-    data = response.json()
-
-    if data["success"]:
-        await ctx.send(
-            sender,
-            SwapResponse(
-                tx_hash=data["transactionHash"],
-                explorer_url=data["explorerUrl"]
-            )
-        )
-    else:
-        await ctx.send(sender, f"Error: {data['error']}")
-```
-
-### JavaScript/TypeScript Client
-
-```typescript
-import axios from 'axios';
-
-const BACKEND_URL = 'http://localhost:3000';
-
-async function mintNFT(userAddress: string, name: string, description: string, imageUrl: string) {
-  const response = await axios.post(`${BACKEND_URL}/api/mint-nft`, {
-    userAddress,
-    name,
-    description,
-    imageUrl
-  });
-
-  if (response.data.success) {
-    console.log(`NFT minted: ${response.data.nftObjectId}`);
-    console.log(`Explorer: ${response.data.explorerUrl}`);
-    return response.data.nftObjectId;
-  } else {
-    throw new Error(response.data.error);
-  }
-}
-
-// Usage
-await mintNFT(
-  'agent1qw3k5l2m8p9r7s6t4u5v6...',
-  'My NFT',
-  'Digital artwork',
-  'https://example.com/nft.png'
-);
-```
-
----
-
-## 🐛 Troubleshooting
-
-### Error: "Insufficient balance"
-- Check balance: `GET /api/user/balance?userAddress=...`
-- Verify deposits swept to agent wallet
-- Ensure agent wallet has testnet SUI
-
-### Error: "NFT not found or not owned"
-- Query NFTs: `GET /api/user/nfts?userAddress=...`
-- Verify NFT hasn't been transferred
-- Check NFT status in database
-
-### Error: "Pool not found"
-- Verify token symbols (case-sensitive)
-- Check Cetus pool exists for token pair
-- Try common pairs first (SUI/USDC)
-
-### Error: "Database connection failed"
-- Verify `DATABASE_URL` is correct
-- Check database is accessible
-- Ensure SSL mode matches requirements
-
-### Backend Not Starting
-```bash
-# Check if port 3000 is in use
-lsof -ti:3000 | xargs kill -9
-
-# Restart with logs
-npm run dev
-```
-
----
-
 ## 🔮 Future Enhancements
 
 - [ ] Support for more DEXs (Turbos, Aftermath)
@@ -675,7 +516,7 @@ MIT License - see LICENSE file for details
 **Category**: AI Agents × Blockchain Integration
 
 **Key Innovations:**
-1. **Multi-User Custodial Architecture** - Novel hybrid approach for agent wallets
+1. **Multi-User Non-custodial Architecture** - Approach for agent wallets
 2. **Semantic PTB Registry** - AI-powered transaction template matching
 3. **Gas Abstraction** - Zero friction for AI agent users
 4. **Production Ready** - Live testnet deployment with full test coverage
