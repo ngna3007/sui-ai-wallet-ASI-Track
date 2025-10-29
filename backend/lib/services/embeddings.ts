@@ -1,32 +1,32 @@
 /**
- * Embeddings service using Voyage AI or Google Gemini
+ * Embeddings service using Google Gemini or Voyage AI
  * Integrated from ai-wallet-main for improved PTB search
  */
 
-// Primary embedding function - tries Voyage AI first, falls back to Gemini
+// Primary embedding function - tries Gemini first, falls back to Voyage AI
 export async function calculateEmbedding(text: string): Promise<number[]> {
   const hasVoyage = !!process.env.VOYAGE_API_KEY;
   const hasGemini = !!process.env.GOOGLE_API_KEY;
 
   if (!hasVoyage && !hasGemini) {
-    throw new Error('Either VOYAGE_API_KEY or GOOGLE_API_KEY is required for embedding generation');
+    throw new Error('Either GOOGLE_API_KEY or VOYAGE_API_KEY is required for embedding generation');
   }
 
   let embedding: number[];
 
-  // Try Voyage AI first if available
-  if (hasVoyage) {
+  // Try Gemini first if available
+  if (hasGemini) {
     try {
-      console.log('Using Voyage AI for embedding generation');
-      embedding = await generateVoyageEmbedding(text);
-    } catch (error: any) {
-      console.warn('Voyage AI failed, trying Gemini fallback:', error.message);
-      if (!hasGemini) throw error;
+      console.log('Using Google Gemini for embedding generation');
       embedding = await generateGeminiEmbedding(text);
+    } catch (error: any) {
+      console.warn('Gemini failed, trying Voyage AI fallback:', error.message);
+      if (!hasVoyage) throw error;
+      embedding = await generateVoyageEmbedding(text);
     }
   } else {
-    console.log('Using Google Gemini for embedding generation');
-    embedding = await generateGeminiEmbedding(text);
+    console.log('Using Voyage AI for embedding generation');
+    embedding = await generateVoyageEmbedding(text);
   }
 
   // Validate dimensions

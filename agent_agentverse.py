@@ -929,49 +929,53 @@ def generate_help_response(ctx: Context, user_query: str) -> str:
 
     # App description for LLM
     app_description = """
-Sui AI Assistant is an AI-powered custodial wallet assistant for the Sui blockchain.
+Sui AI Assistant - Your AI-powered wallet for Sui blockchain.
 
-HOW IT WORKS:
-1. Each user gets a unique Sui deposit address managed by our backend
-2. Users send SUI tokens to their personal deposit address
-3. The backend monitors deposits and credits the user's account balance
-4. Users can then perform DeFi operations using their balance
+🏦 UNDERSTANDING YOUR DEPOSIT ACCOUNT:
+This is a custodial wallet where we manage transactions for you. Here's how it works:
 
-MAIN FEATURES:
+WHY: Instead of managing private keys yourself, you get a unique deposit address. This makes it safer and easier - just send SUI tokens there, and I handle everything else.
+
+HOW TO USE:
+1. Ask for your "deposit address" - you'll get a unique Sui address
+2. Send SUI tokens to that address (from any wallet or exchange)
+3. Once deposited, you can use commands like "check balance", "swap tokens", "mint NFT", etc.
+4. All operations use YOUR deposited balance - we execute transactions on your behalf
+
+Think of it like a bank account: you deposit funds, then tell me what to do with them!
+
+KEY FEATURES:
 
 💰 BALANCE & DEPOSITS:
-- "check my balance" - View your current token balances
-- "deposit" or "how do I deposit" - Get your unique deposit address to fund your account
-- You must deposit SUI first before using other features
+- "deposit" or "deposit address" - Get your unique deposit address
+- "check balance" - View your current balances
+- Important: Deposit SUI first before using other features!
 
-🔄 TOKEN SWAPS:
+🔄 TOKEN SWAPS (⚠️ EXPERIMENTAL):
 - "swap 10 SUI to USDC" - Exchange tokens via Cetus DEX
 - Supports: SUI, USDC, USDT
-- Uses your deposited balance
+- WARNING: This feature is still in development. You may need to manually provide pool ID and coin type information from Cetus DEX (https://app.cetus.zone) if automated parameter detection fails.
 
 🎨 NFT OPERATIONS:
-- "mint nft 'Art Name' with description 'Beautiful art' and image https://example.com/img.png" - Create NFT
-- "my nfts" - View your NFT collection
-- "transfer nft [id] to [address]" - Send NFT to another wallet
+- "mint nft 'Name' with description 'Desc' and image https://..." - Create NFT
+- "my nfts" - View your collection
+- "transfer nft [id] to [address]" - Send NFT
 
 💵 PRICE CHECKS:
-- "price of SUI" - Get real-time cryptocurrency prices from CoinMarketCap
+- "price of SUI" - Real-time crypto prices from CoinMarketCap
 
 📰 CRYPTO NEWS:
-- "crypto news" or "what's happening in DeFi" - Get latest crypto/DeFi updates from X/Twitter
-- "news about SUI" - Search for specific token or topic news
+- "crypto news" - Latest updates from X/Twitter
+- "news about SUI" - Search specific tokens
 
 🔬 MARKET RESEARCH:
-- "analyze SUI" or "research SUI market" - Comprehensive analysis with price + news + sentiment
-- "research memecoins" - Category-based research with sentiment analysis
-- Combines price data, social media sentiment, and latest news for informed decisions
-
-KEY POINT: This is a custodial system. We manage the wallet for you. You deposit to YOUR unique address, and we handle all transactions on your behalf.
+- "analyze SUI" - Comprehensive analysis with price + sentiment + news
+- "research memecoins" - Category-based market research
 """
 
     if not anthropic_client:
         # Fallback if no LLM available
-        return "👋 Hi! I'm Sui AI Assistant, your AI-powered custodial wallet for Sui blockchain!\n\n🏦 HOW IT WORKS:\nYou get a unique deposit address. Send SUI there, and I'll manage your wallet for you!\n\n✨ I CAN HELP WITH:\n💰 Balance & Deposits (ask for 'deposit address')\n🔄 Token Swaps (SUI, USDC, USDT)\n🎨 NFT Operations (mint, view, transfer)\n💵 Crypto Prices\n📰 Crypto News\n🔬 Market Research (analyze tokens with sentiment)\n\nJust tell me what you want to do!"
+        return "👋 Hi! I'm Sui AI Assistant, your AI-powered wallet for Sui blockchain!\n\n🏦 YOUR DEPOSIT ACCOUNT:\nInstead of managing private keys, you get a unique deposit address. Just send SUI there, and I handle everything!\n\nHOW TO START:\n1. Ask for your 'deposit address'\n2. Send SUI tokens there\n3. Use commands: 'check balance', 'mint NFT', etc.\n\n✨ KEY FEATURES:\n💰 Balance & Deposits\n🔄 Token Swaps (⚠️ experimental - may need manual params)\n🎨 NFT Operations\n💵 Crypto Prices\n📰 Crypto News\n🔬 Market Research\n\nWhat would you like to do?"
 
     try:
         response = anthropic_client.messages.create(
@@ -990,7 +994,7 @@ Format your response in a conversational way that matches the user's query tone.
     except Exception as e:
         ctx.logger.error(f"❌ LLM help generation failed: {e}")
         # Fallback message
-        return "👋 Hi! I'm Sui AI Assistant, your AI Sui wallet assistant!\n\nI can help with:\n💰 Balance & Deposits\n🔄 Token Swaps\n🎨 NFT Operations\n💵 Price Checks\n\nJust tell me what you want to do!"
+        return "👋 Hi! I'm Sui AI Assistant!\n\n🏦 Get your deposit address first, send SUI there, then use features like:\n💰 Balance & Deposits\n🔄 Token Swaps (⚠️ experimental)\n🎨 NFT Operations\n💵 Price Checks\n📰 Crypto News\n\nWhat would you like to do?"
 
 async def handle_atomic_transaction(ctx: Context, user_address: str, intent: str) -> dict:
     """Execute multiple operations atomically using /api/create-ptb endpoint"""
@@ -1017,9 +1021,8 @@ async def handle_atomic_transaction(ctx: Context, user_address: str, intent: str
                 result = {
                     "success": True,
                     "transaction_hash": tx_hash,
-                    "explorer_url": f"https://testnet.suivision.xyz/txblock/{tx_hash}",
+                    "explorer_url": f"https://suiscan.xyz/testnet/tx/{tx_hash}",
                     "template": template_name,
-                    "mode": mode
                 }
 
                 # Add multi-op specific info if available
@@ -1044,6 +1047,34 @@ async def handle_atomic_transaction(ctx: Context, user_address: str, intent: str
             "success": False,
             "error": str(e)
         }
+
+# ============================================================================
+# CONVERSATION HISTORY STORAGE
+# ============================================================================
+
+# Store conversation history per user (in-memory, limited to last 10 messages)
+# Format: {sender_address: [{"role": "user", "content": "..."}, {"role": "assistant", "content": [...]}]}
+conversation_history: Dict[str, list] = {}
+
+def get_conversation_history(sender: str, max_messages: int = 10) -> list:
+    """Get conversation history for a sender (last N messages)"""
+    history = conversation_history.get(sender, [])
+    # Return last N messages (each turn = user + assistant)
+    return history[-max_messages:] if len(history) > max_messages else history
+
+def add_to_conversation_history(sender: str, user_msg: str, assistant_response: list):
+    """Add a turn to conversation history"""
+    if sender not in conversation_history:
+        conversation_history[sender] = []
+
+    # Add user message
+    conversation_history[sender].append({"role": "user", "content": user_msg})
+
+    # Add assistant response (including tool calls)
+    conversation_history[sender].append({"role": "assistant", "content": assistant_response})
+
+    # Keep only last 20 messages (10 turns) to avoid token limits
+    conversation_history[sender] = conversation_history[sender][-20:]
 
 # ============================================================================
 # CHAT HANDLERS
@@ -1083,6 +1114,52 @@ async def handle_chat_message(ctx: Context, sender: str, msg: ChatMessage):
         ))
         return
 
+    # Fetch user info (including deposit address) for context
+    # This ensures user is created if they don't exist
+    user_deposit_address = None
+    try:
+        # DEBUG: Log the request details
+        ctx.logger.info(f"🌐 Fetching user info from: {BACKEND_URL}/api/user/info")
+        ctx.logger.info(f"📨 Request params: userAddress={sender}")
+        headers_to_use = get_backend_headers()
+        ctx.logger.info(f"🔑 Headers: {list(headers_to_use.keys())}")
+        if BACKEND_API_KEY:
+            ctx.logger.info(f"🔑 API Key: {BACKEND_API_KEY[:20]}...")
+        else:
+            ctx.logger.warning(f"⚠️ No BACKEND_API_KEY configured!")
+
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            user_info_response = await client.get(
+                f"{BACKEND_URL}/api/user/info",
+                headers=headers_to_use,
+                params={"userAddress": sender}
+            )
+            if user_info_response.status_code == 200:
+                user_data = user_info_response.json()
+
+                # DEBUG: Log the full response
+                ctx.logger.info(f"🔍 Backend response: {json.dumps(user_data, indent=2)}")
+
+                # Check if response has nested structure
+                if user_data.get("success"):
+                    # Response format: {"success": true, "user": {"depositAddress": "0x..."}}
+                    user_obj = user_data.get("user", {})
+                    user_deposit_address = user_obj.get("depositAddress")
+                    ctx.logger.info(f"📦 Extracted from user object: {user_deposit_address}")
+                else:
+                    # Response format: {"depositAddress": "0x..."}
+                    user_deposit_address = user_data.get("depositAddress")
+                    ctx.logger.info(f"📦 Extracted directly: {user_deposit_address}")
+
+                ctx.logger.info(f"✅ User deposit address fetched: {user_deposit_address}")
+
+                if not user_deposit_address:
+                    ctx.logger.error(f"⚠️ No deposit address in response! Full response: {user_data}")
+            else:
+                ctx.logger.warning(f"⚠️ Failed to fetch user info: {user_info_response.status_code}")
+    except Exception as e:
+        ctx.logger.warning(f"⚠️ Could not fetch user deposit address: {e}")
+
     try:
         # Define available tools for Claude
         tools = [
@@ -1106,7 +1183,7 @@ async def handle_chat_message(ctx: Context, sender: str, msg: ChatMessage):
             },
             {
                 "name": "swap_tokens",
-                "description": "Swap tokens using Cetus DEX. Supports SUI, USDC, USDT.",
+                "description": "⚠️ EXPERIMENTAL: Swap tokens using Cetus DEX. Supports SUI, USDC, USDT. WARNING: This feature is still in development. Users may need to manually provide pool_id and coin type information from Cetus DEX (https://app.cetus.zone) if automated detection fails. Inform users about this limitation before attempting swaps.",
                 "input_schema": {
                     "type": "object",
                     "properties": {
@@ -1141,12 +1218,12 @@ async def handle_chat_message(ctx: Context, sender: str, msg: ChatMessage):
             },
             {
                 "name": "transfer_nft",
-                "description": "Transfer an NFT to another address.",
+                "description": "Transfer/send/withdraw an NFT to another address. Use this when user says 'transfer', 'send', 'withdraw' for NFTs. If user just minted an NFT and says 'send it to [address]', use the NFT ID from the mint result.",
                 "input_schema": {
                     "type": "object",
                     "properties": {
-                        "nft_id": {"type": "string", "description": "ID of the NFT to transfer"},
-                        "recipient": {"type": "string", "description": "Recipient Sui address"}
+                        "nft_id": {"type": "string", "description": "Object ID of the NFT to transfer (e.g., 0x0de5ced21d6ca7...)"},
+                        "recipient": {"type": "string", "description": "Recipient Sui address (starts with 0x)"}
                     },
                     "required": ["nft_id", "recipient"]
                 }
@@ -1198,6 +1275,41 @@ async def handle_chat_message(ctx: Context, sender: str, msg: ChatMessage):
             }
         ]
 
+        # Get conversation history (for context across turns)
+        history = get_conversation_history(sender, max_messages=10)
+        ctx.logger.info(f"📜 Using {len(history)} previous messages for context")
+
+        # Build deposit address context
+        deposit_address_context = ""
+        if user_deposit_address:
+            # Only show greeting instruction if this is the FIRST message in conversation
+            is_first_message = len(history) == 0
+            
+            if is_first_message:
+                deposit_address_context = """
+
+⚠️ CRITICAL INSTRUCTION - MUST FOLLOW (FIRST MESSAGE ONLY) ⚠️
+USER'S DEPOSIT ADDRESS: """ + user_deposit_address + """
+
+When user says ANYTHING that looks like a greeting ("hi", "hello", "hey", "greetings", "what can you do", "help"), you MUST start your response with:
+
+"👋 Welcome! Your deposit address is:
+""" + user_deposit_address + """
+
+Send SUI to this address to get started, then I can help you with swaps, NFTs, prices, and market research!"
+
+DO NOT skip this. DO NOT give a generic greeting without the address. The deposit address MUST be in your first response to greetings.
+"""
+            else:
+                # After first message, just provide the address as context (don't force showing it)
+                deposit_address_context = """
+
+CONTEXT - USER'S DEPOSIT ADDRESS: """ + user_deposit_address + """
+(User already knows their deposit address from earlier conversation. Don't repeat it unless they specifically ask for it.)
+"""
+        else:
+            ctx.logger.warning("⚠️ No deposit address available - user may need to be created")
+
         # System prompt
         system_prompt = """You are Sui AI Assistant - a helpful AI for a custodial Sui blockchain wallet.
 
@@ -1205,14 +1317,21 @@ CONTEXT:
 - Custodial wallet system - you manage wallets for users
 - Each user has a unique deposit address to fund their account
 - Users must deposit SUI first before swaps/NFT operations
+""" + deposit_address_context + """
 
 YOUR CAPABILITIES:
 You have tools to help users with:
+
 💰 Balance & Deposits - Check balance, get deposit address
+
 🔄 Token Swaps - Exchange SUI, USDC, USDT via Cetus DEX
+
 🎨 NFT Operations - Mint, view, transfer NFTs
+
 💵 Price Data - Real-time crypto prices from CoinMarketCap
+
 📰 Crypto News - Latest updates from X/Twitter
+
 🔬 Market Research - Comprehensive analysis with price + news + sentiment
 
 IMPORTANT PRINCIPLES:
@@ -1227,6 +1346,76 @@ IMPORTANT PRINCIPLES:
   Example: If you asked for NFT details and user says "meme, nice meme, https://example.com/img.png" → extract as name="meme", description="nice meme", image_url="https://example.com/img.png"
   Even if they say "meme, nice meme, img" with incomplete URL, try to mint with what they give and explain if image URL is invalid
 
+CONVERSATION CONTEXT & INTENT UNDERSTANDING (CRITICAL - READ CAREFULLY):
+
+🧠 MEMORY & CONTEXT:
+- You have access to previous conversation messages in the messages array
+- ALWAYS look at the last 2-3 messages to understand what's happening
+- If you just listed NFTs and user says "withdraw the nice meme one", you KNOW which NFT they mean - you literally just showed them the list!
+- If user says "go on" or "continue" or "do it", they mean: continue with the action they JUST requested in their previous message
+
+🔄 UNDERSTANDING SYNONYMS & VARIATIONS:
+- "withdraw", "send", "transfer", "move" = ALL mean transfer_nft for NFTs
+- "that one", "the nice meme", "meme (nice meme)" = referring to NFT from the list YOU just showed
+- User doesn't need to provide NFT ID if you just listed it - YOU should extract it from your own previous response!
+
+⚠️ CRITICAL: EXTRACT THEN EXECUTE - DON'T JUST ACKNOWLEDGE!
+
+When user references an NFT from a previous list_nfts call, you MUST:
+
+STEP 1 - EXTRACT NFT ID FROM CONVERSATION HISTORY:
+- Look back at the most recent list_nfts tool result in the conversation
+- The result has format: {"success": true, "data": {"nfts": [{"objectId": "0x...", "name": "...", "description": "..."}], "count": N}}
+- Find the NFT object that matches the user's reference (by name or description)
+- Extract the "objectId" value - this is the nft_id parameter you need
+
+STEP 2 - CALL THE TOOL IMMEDIATELY:
+- DO NOT respond with text like "Perfect! I found it. Now transferring..."
+- DO NOT acknowledge and wait for confirmation
+- IMMEDIATELY call transfer_nft with the extracted nft_id and the recipient address the user provided
+
+WRONG BEHAVIOR (DO NOT DO THIS):
+User: "withdraw meme (nice meme) to 0x78df..."
+You: "Perfect! I found the NFT with description 'nice meme'. Now transferring it to your wallet..." [NO TOOL CALL]
+Result: User frustrated because nothing happened
+
+CORRECT BEHAVIOR (DO THIS):
+User: "withdraw meme (nice meme) to 0x78df..."
+You: [IMMEDIATELY call transfer_nft tool with nft_id="0x54b96..." and recipient="0x78df..."]
+You: "✅ Successfully transferred meme (nice meme) to 0x78df..."
+
+📝 STEP-BY-STEP NFT EXTRACTION PROCEDURE:
+1. User says "transfer [nft reference] to [address]"
+2. Search conversation history for most recent tool_result from list_nfts
+3. Parse the JSON in that tool_result to get the nfts array
+4. Match user's [nft reference] against name or description fields
+5. Extract the objectId from the matched NFT object
+6. CALL transfer_nft(nft_id=objectId, recipient=address) - DO NOT WAIT OR ASK
+
+⚡ ACTION OVER WORDS:
+- If you understand what the user wants and you have the data to do it → CALL THE TOOL
+- Don't describe what you're about to do → JUST DO IT
+- Don't say "I found it" → TRANSFER IT
+- Actions speak louder than acknowledgments!
+
+🎯 EXAMPLE FLOW (LEARN THIS EXACTLY):
+1. User: "my nfts" 
+   → You call list_nfts 
+   → Tool returns: {"success": true, "data": {"nfts": [{"objectId": "0x54b96...", "name": "meme", "description": "nice meme"}]}}
+   → You show user: "You have 1 NFT: meme (nice meme)"
+
+2. User: "withdraw meme (nice meme) to 0x78df..."
+   → You IMMEDIATELY extract objectId="0x54b96..." from step 1's tool result
+   → You IMMEDIATELY call transfer_nft with nft_id="0x54b96..." and recipient="0x78df..."
+   → You respond with the transfer result
+
+NOT THIS:
+2. User: "withdraw meme (nice meme) to 0x78df..."
+   → You respond: "Perfect! I found it. Now transferring..." [NO TOOL CALL] ❌ WRONG!
+
+💡 KEY PRINCIPLE:
+If you can execute the action by extracting data from conversation history, EXECUTE IT IMMEDIATELY. Don't talk about executing it - just execute it!
+
 FORMATTING RULES (CRITICAL):
 - Always put spaces around dollar amounts: "from $238k to $514k" NOT "from238k to$514k"
 - Use proper line breaks between sections: double newline (press enter twice)
@@ -1240,13 +1429,24 @@ FORMATTING RULES (CRITICAL):
 NOT: "**RATIO** − showingactivitywithareported2.5xmoverecently(from238kto$514k)"
 """
 
+        # Debug: Log whether deposit address is in system prompt
+        if user_deposit_address and is_first_message and "CRITICAL INSTRUCTION" in system_prompt:
+            ctx.logger.info("✅ First message - deposit address greeting will be shown")
+        elif user_deposit_address and not is_first_message:
+            ctx.logger.info("✅ Continuing conversation - deposit address available in context")
+        else:
+            ctx.logger.warning(f"⚠️ Deposit address issue (address: {user_deposit_address}, first_msg: {is_first_message})")
+
+        # Build messages array: history + current query
+        messages = history + [{"role": "user", "content": user_query}]
+
         # Call Claude with tools
         response = anthropic_client.messages.create(
             model="claude-haiku-4-5-20251001",
             max_tokens=2048,
             system=system_prompt,
             tools=tools,
-            messages=[{"role": "user", "content": user_query}]
+            messages=messages
         )
 
         # Process response and execute tools
@@ -1328,7 +1528,7 @@ NOT: "**RATIO** − showingactivitywithareported2.5xmoverecently(from238kto$514k
                 max_tokens=2048,
                 system=system_prompt,
                 tools=tools,
-                messages=[
+                messages=history + [
                     {"role": "user", "content": user_query},
                     {"role": "assistant", "content": response.content},
                     {"role": "user", "content": tool_results}
@@ -1340,6 +1540,12 @@ NOT: "**RATIO** − showingactivitywithareported2.5xmoverecently(from238kto$514k
                 if content_block.type == "text":
                     response_text = content_block.text
                     break
+
+            # Save conversation history (with tool call and final response)
+            add_to_conversation_history(sender, user_query, final_response.content)
+        else:
+            # Save conversation history (direct response without tools)
+            add_to_conversation_history(sender, user_query, response.content)
 
         # Send response
         if response_text:
