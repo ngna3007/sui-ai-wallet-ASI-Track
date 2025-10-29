@@ -14,7 +14,8 @@
 
 ### **Primary Agent (Agentverse)**
 - **Agent Name:** `Sui AI Assistant`
-- **Agent Address:** `agent1qv2almrdfrwh45dnwuz0cfsgpkv7kht5ngy7r53c847xsw77q07ez5y00su` (agentverse.ai)
+- **Agent Address:** `agent1qv2almrdfrwh45dnwuz0cfsgpkv7kht5ngy7r53c847xsw77q07ez5y00su`
+- **URL:** https://agentverse.ai/agents/details/agent1qv2almrdfrwh45dnwuz0cfsgpkv7kht5ngy7r53c847xsw77q07ez5y00su/profile
 - **Network:** Sui Testnet
 - **Backend:** Render-hosted TypeScript backend
 - **ASI:One Compatible:** ✅ Yes
