@@ -33,6 +33,14 @@ try:
 except ImportError:
     pass  # dotenv not available in Agentverse, env vars come from secrets
 
+# Import MeTTa-inspired knowledge graph (ASI Alliance tech)
+try:
+    from knowledge.metta_kg import get_knowledge_base, query_knowledge
+    KNOWLEDGE_GRAPH_AVAILABLE = True
+except ImportError:
+    KNOWLEDGE_GRAPH_AVAILABLE = False
+    print("⚠️ Knowledge graph not available")
+
 # ============================================================================
 # CONFIGURATION
 # ============================================================================
@@ -475,17 +483,47 @@ async def handle_deposit(ctx: Context, user_address: str) -> dict:
 async def handle_swap(ctx: Context, user_address: str, from_token: str, to_token: str, amount: float) -> dict:
     """Execute token swap - returns structured data"""
     ctx.logger.info(f"🔄 Swapping {amount} {from_token} → {to_token}")
+
+    # Build swap payload
+    swap_payload = {
+        "userAddress": user_address,
+        "fromToken": from_token,  # Backend expects fromToken, not fromCoin
+        "toToken": to_token,      # Backend expects toToken, not toCoin
+        "amount": amount
+    }
+
+    # Query MeTTa-inspired knowledge graph for swap parameters (ASI Alliance tech)
+    if KNOWLEDGE_GRAPH_AVAILABLE:
+        try:
+            # Get complete swap parameters from knowledge graph
+            swap_params = query_knowledge("swap_params", coin_in=from_token, coin_out=to_token)
+            if swap_params:
+                ctx.logger.info(f"🧠 Knowledge Graph provides swap parameters:")
+                ctx.logger.info(f"   - DEX: {swap_params.get('dex')}")
+                ctx.logger.info(f"   - {from_token} address: {swap_params['tokenFrom']['address'][:20]}...")
+                ctx.logger.info(f"   - {to_token} address: {swap_params['tokenTo']['address'][:20]}...")
+                ctx.logger.info(f"   - Global Config: {swap_params.get('globalConfig', 'N/A')[:20]}...")
+
+                # Enhance payload with knowledge graph data
+                swap_payload["tokenFromAddress"] = swap_params['tokenFrom']['address']
+                swap_payload["tokenToAddress"] = swap_params['tokenTo']['address']
+                swap_payload["tokenFromDecimals"] = swap_params['tokenFrom']['decimals']
+                swap_payload["tokenToDecimals"] = swap_params['tokenTo']['decimals']
+                swap_payload["dex"] = swap_params.get('dex', 'Cetus')
+                swap_payload["globalConfig"] = swap_params.get('globalConfig')
+
+            # Also get gas estimate for logging
+            gas = query_knowledge("gas_estimate", operation="swap")
+            if gas:
+                ctx.logger.info(f"🧠 Knowledge Graph gas estimate: {gas} SUI")
+        except Exception as e:
+            ctx.logger.warning(f"⚠️ Knowledge graph query failed: {e}")
+
     try:
         async with httpx.AsyncClient(timeout=60.0, follow_redirects=True) as client:
             response = await client.post(
                 f"{BACKEND_URL}/api/swap",
-                json={
-                    "userAddress": user_address,
-                    "fromCoin": from_token,
-                    "toCoin": to_token,
-                    "amount": amount,
-                    "slippage": 0.01
-                },
+                json=swap_payload,
                 headers=get_backend_headers()
             )
             if response.status_code != 200:
@@ -527,6 +565,21 @@ async def handle_swap(ctx: Context, user_address: str, from_token: str, to_token
 async def handle_nft_mint(ctx: Context, user_address: str, nft_name: str, description: str, image_url: str) -> dict:
     """Mint NFT - returns structured data"""
     ctx.logger.info(f"🎨 Minting NFT: {nft_name}")
+
+    # Query MeTTa-inspired knowledge graph for NFT operations (ASI Alliance tech)
+    if KNOWLEDGE_GRAPH_AVAILABLE:
+        try:
+            gas = query_knowledge("gas_estimate", operation="mint_nft")
+            if gas:
+                ctx.logger.info(f"🧠 Knowledge Graph gas estimate for NFT mint: {gas} SUI")
+
+            # Check if TradePort supports mint operation
+            supports_mint = query_knowledge("supports_operation", entity="TradePort", operation="mint")
+            if supports_mint:
+                ctx.logger.info(f"🧠 Knowledge Graph: TradePort supports mint operation")
+        except Exception as e:
+            ctx.logger.warning(f"⚠️ Knowledge graph query failed: {e}")
+
     try:
         async with httpx.AsyncClient(timeout=60.0, follow_redirects=True) as client:
             response = await client.post(
@@ -1127,6 +1180,15 @@ async def startup(ctx: Context):
     ctx.logger.info("Agent started successfully")
     ctx.logger.info(f"Agent address: {agent.address}")
 
+    # Initialize MeTTa-inspired knowledge graph (ASI Alliance tech)
+    if KNOWLEDGE_GRAPH_AVAILABLE:
+        try:
+            kg = get_knowledge_base()
+            dex_count = len([s for s, p, o in kg.query(None, "is_type", "DEX")])
+            ctx.logger.info(f"🧠 Knowledge Graph loaded: {dex_count} DEXes, inspired by SingularityNET MeTTa")
+        except Exception as e:
+            ctx.logger.warning(f"⚠️ Knowledge Graph initialization failed: {e}")
+
 @chat_proto.on_message(ChatMessage)
 async def handle_chat_message(ctx: Context, sender: str, msg: ChatMessage):
     """Handle incoming chat messages"""
@@ -1392,6 +1454,12 @@ You have tools to help users with:
 💰 Balance & Deposits - Check balance, get deposit address
 
 🔄 Token Swaps - Exchange SUI, USDC, USDT via Cetus DEX
+   ⚠️ SWAP LIMITATIONS (Important - Tell users when relevant):
+   - Supported tokens: SUI, USDC, USDT, CETUS, WAL (testnet)
+   - Some token pairs may have low liquidity (e.g., SUI/WAL)
+   - If swap fails with pool errors, suggest liquid pairs: SUI↔USDC or SUI↔USDT
+   - Minimum amounts may apply (recommend 0.01+ SUI for testing)
+   - MeTTa knowledge graph provides token addresses and DEX routing
 
 🎨 NFT Operations - Mint, view, transfer NFTs
 
