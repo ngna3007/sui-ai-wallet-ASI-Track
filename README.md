@@ -49,12 +49,19 @@
 ### Key Capabilities
 
 ✅ **Transfer token** - Transfer tokens to any valid wallet address (now only SUI)
+
 ✅ **Token Swaps** - Cetus DEX with MeTTa knowledge graph for automatic address discovery
+
 ✅ **NFT Management** - Mint custom NFTs, transfer with ownership verification
+
 ✅ **Balance Tracking** - Blockchain balance queries for deposit addresses (no sweep, no DB balance)
+
 ✅ **Transaction History** - Complete audit trail per user
+
 ✅ **Semantic Search** - AI-powered transaction template matching
+
 ✅ **Natural Language** - Chat with agents in plain English
+
 ✅ **ASI Alliance Tech** - Fetch.ai uAgents + SingularityNET MeTTa + ASI1 AI
 
 ---
