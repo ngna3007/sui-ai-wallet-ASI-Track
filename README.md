@@ -48,6 +48,7 @@
 
 ### Key Capabilities
 
+✅ **Transfer token** - Transfer tokens to any valid wallet address (now only SUI)
 ✅ **Token Swaps** - Cetus DEX with MeTTa knowledge graph for automatic address discovery
 ✅ **NFT Management** - Mint custom NFTs, transfer with ownership verification
 ✅ **Balance Tracking** - Blockchain balance queries for deposit addresses (no sweep, no DB balance)
