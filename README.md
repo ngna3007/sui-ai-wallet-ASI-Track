@@ -39,21 +39,22 @@
 
 ### What Makes Sui AI Assistant Special?
 
-- **🔐 Multi-User Custodial Architecture**: Each agent gets unique deposit address, single backend manages all transactions
+- **🔐 Hybrid Architecture**: Each agent gets unique deposit address (non-custodial tracking), agent wallet executes transactions (custodial)
 - **💱 Real DeFi Operations**: Live token swaps via Cetus DEX, NFT minting/transfers on Sui testnet
 - **🤖 AI-Powered**: Natural language processing with Claude, semantic PTB template matching
-- **⚡ Gas Abstraction**: Users never need private keys or gas tokens
-- **🛡️ Database-Tracked Ownership**: PostgreSQL ensures per-user balance and NFT tracking
+- **⚡ Gas Abstraction**: Agent wallet pays all gas fees
+- **🛡️ Database-Tracked Ownership**: PostgreSQL tracks deposit addresses and NFT ownership (balances read from blockchain)
 - **📦 PTB Registry**: Extensible template library for programmable transactions
 
 ### Key Capabilities
 
-✅ **Token Swaps** - Cetus DEX integration with automatic pool discovery
+✅ **Token Swaps** - Cetus DEX with MeTTa knowledge graph for automatic address discovery
 ✅ **NFT Management** - Mint custom NFTs, transfer with ownership verification
-✅ **Balance Tracking** - Real-time per-user balances with automatic sweeping
+✅ **Balance Tracking** - Blockchain balance queries for deposit addresses (no sweep, no DB balance)
 ✅ **Transaction History** - Complete audit trail per user
 ✅ **Semantic Search** - AI-powered transaction template matching
 ✅ **Natural Language** - Chat with agents in plain English
+✅ **ASI Alliance Tech** - Fetch.ai uAgents + SingularityNET MeTTa + ASI1 AI
 
 ---
 
@@ -72,30 +73,32 @@ Sui AI Assistant implements a hybrid custodial architecture optimized for AI age
 │ │ User's Deposit Address (Deterministic)               │   │
 │ │ 0xabcd1234... (derived from agent address)           │   │
 │ │ - Receives deposits from external sources            │   │
-│ │ - Auto-swept to agent wallet                         │   │
+│ │ - Funds STAY HERE (not swept)                        │   │
+│ │ - Balance read from blockchain on demand             │   │
 │ └──────────────────────────────────────────────────────┘   │
 └─────────────────────────────────────────────────────────────┘
                             │
-                            │ deposits detected & swept
+                            │ balance queries (no sweep!)
                             ▼
 ┌─────────────────────────────────────────────────────────────┐
 │ Agent Wallet (Custodial)                                    │
 │ 0x7c10a9b8fc5d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6a7b8c9d0e1f2   │
 │                                                              │
-│ - Holds ALL assets on-chain                                 │
+│ - Holds AGENT'S OWN assets on-chain                         │
 │ - Executes transactions for all users                       │
 │ - Pays gas fees                                             │
 │ - Managed by backend service                                │
+│ - ⚠️ Note: Currently NOT funded by user deposits            │
 └─────────────────────────────────────────────────────────────┘
                             │
-                            │ ownership tracked in DB
+                            │ transactions recorded in DB
                             ▼
 ┌─────────────────────────────────────────────────────────────┐
 │ Database (PostgreSQL - Neon)                                │
 │                                                              │
 │ user_accounts:                                              │
-│   - agent1qw3k... → balance: 100 SUI                        │
-│   - agent1qx5n... → balance: 50 SUI                         │
+│   - agent1qw3k... → depositAddress: 0xabcd...               │
+│   - agent1qx5n... → depositAddress: 0xdef4...               │
 │                                                              │
 │ user_nfts:                                                  │
 │   - agent1qw3k... → NFT_123 (status: owned)                 │
@@ -105,44 +108,72 @@ Sui AI Assistant implements a hybrid custodial architecture optimized for AI age
 
 ### How It Works
 
-**1. User Deposits**
+**1. User Gets Deposit Address (Non-Custodial Setup)**
 ```
-Agent sends 100 SUI → deposit_address (0xabcd...)
+User: "what's my deposit address?"
   ↓
-Backend detects deposit via polling
+Agent → Backend: GET /api/user/info?userAddress=agent1q...
   ↓
-Sweep: deposit_address → agent_wallet
+Backend creates unique deposit address (derived from user address)
   ↓
-Database: user_accounts.balance += 100 SUI
+Database: user_accounts stores (user_address, deposit_address, seed)
+  ↓
+Returns: "Your deposit address is 0xabcd..."
 ```
 
-**2. User Requests Swap**
+**2. User Deposits Funds**
+```
+User sends 100 SUI → deposit_address (0xabcd...) externally
+  ↓
+User: "check balance"
+  ↓
+Agent → Backend: GET /api/balance?address=0xabcd...
+  ↓
+Backend reads balance DIRECTLY from Sui blockchain (no sweep, no DB balance)
+  ↓
+Database: deposit_transactions records detection (audit only)
+  ↓
+Returns: "You have 100 SUI" (funds stay in deposit_address)
+```
+
+**3. User Requests Swap (Agent Wallet Execution)**
 ```
 Agent message: "swap 10 SUI to USDC"
   ↓
-Python Agent → Backend API: POST /api/swap
+Python Agent → Knowledge Graph: Get token addresses & DEX config
   ↓
-Backend verifies: user has ≥10 SUI
+Python Agent → Backend: POST /api/swap
+{userAddress, fromToken, toToken, amount, tokenAddresses...}
   ↓
-Agent wallet executes swap on Cetus
+Backend uses AGENT WALLET (not user's deposit address)
   ↓
-Database updated: balance adjusted
+Agent wallet executes swap on Cetus DEX
   ↓
-Transaction hash returned
+Database: user_transactions records transaction (audit trail)
+  ↓
+Returns: transaction hash & explorer URL
 ```
+**⚠️ Note:** Current implementation uses agent wallet as custodian for swaps, NOT user's deposit address.
 
-**3. User Mints NFT**
+**4. User Mints NFT (Agent Wallet Execution)**
 ```
 Agent message: "mint NFT 'My Art'"
   ↓
-Backend: agent_wallet mints NFT
+Python Agent → Backend: POST /api/mint-nft
+{userAddress, name, description, imageUrl}
   ↓
-NFT owned by agent_wallet on-chain
+Backend ensures user exists (calls getOrCreateUser)
   ↓
-Database: user_nfts tracks ownership
+Agent wallet mints NFT using PTB template
   ↓
-User can query/transfer NFT anytime
+NFT owned by agent_wallet on-chain (custodial)
+  ↓
+Database: user_nfts records ownership mapping
+{userAddress, nftObjectId, status: 'owned'}
+  ↓
+Returns: NFT object ID & transaction hash
 ```
+**⚠️ Note:** NFT is minted by agent wallet. Database tracks logical ownership.
 
 ### Three Wallet Types
 
@@ -153,23 +184,25 @@ User can query/transfer NFT anytime
 2. **User's Deposit Address** (`0xabcd...`)
    - Deterministically derived from agent address
    - Receives external deposits
-   - Auto-swept to custodial wallet
+   - **Funds stay here** (NOT swept - balance read from blockchain)
+   - Currently used ONLY for balance checks
 
 3. **Agent's Custodial Wallet** (`0x7c10...`)
-   - Single wallet executing all transactions
-   - Holds all assets on-chain
+   - Single wallet executing all transactions (swaps, NFT mints, etc.)
+   - Holds agent's own assets on-chain
    - Pays all gas fees
+   - **Current limitation**: User deposits don't fund operations (agent wallet acts independently)
 
 ---
 
 ## 🚀 Features
 
 ### ✅ Core Wallet Operations
-- **Multi-User Management**: Isolated balances per agent
+- **Multi-User Management**: Isolated deposit addresses per agent
 - **Deterministic Addresses**: Each agent gets unique deposit address
-- **Automatic Sweeping**: Deposits auto-transferred to custodial wallet
-- **Balance Tracking**: Real-time updates via database
+- **Blockchain Balance Reading**: Direct on-chain balance queries (no sweep)
 - **Transaction History**: Complete audit trail per user
+- **⚠️ Current Architecture**: Operations execute via agent wallet (custodial), not deposit addresses
 
 ### ✅ DeFi Capabilities
 - **Token Swaps**: Cetus DEX with automatic pool discovery
@@ -185,6 +218,20 @@ User can query/transfer NFT anytime
 - **PTB Registry**: Extensible template library
 - **Natural Language**: Plain English commands
 - **Context Awareness**: Maintains conversation state
+
+### ✅ MeTTa-Inspired Knowledge Graph (ASI Alliance Tech)
+- **Purpose**: Demonstrates SingularityNET's MeTTa approach to AI reasoning
+- **Architecture**: Triple-store pattern (subject, predicate, object) with semantic queries
+- **What it provides**:
+  - Real Sui testnet token addresses (SUI, USDC, USDT, WAL, CETUS)
+  - Token decimals for accurate calculations (9 for SUI, 6 for stablecoins)
+  - DEX routing recommendations (Cetus)
+  - Global configuration for Programmable Transaction Blocks
+  - Pool discovery parameters for swap execution
+- **Integration**: Agent queries knowledge graph before calling backend swap API
+- **Benefit**: Enables swap operations without hardcoding blockchain addresses
+- **Proven Working**: Successfully executed SUI→USDC swap (tx: `HWS5PzEBdBPTCiogaAr7ZZsopL5BTdmaDjtJDRPzWnAX`)
+- **Extensible**: Add new tokens by editing `knowledge/metta_kg.py` (see docs below)
 
 ---
 
@@ -202,6 +249,8 @@ User can query/transfer NFT anytime
 
 ### Agent (Python)
 - **Framework**: Fetch.ai uAgents
+- **AI Model**: ASI1 Mini (OpenAI-compatible API)
+- **Knowledge Graph**: MeTTa-inspired triple-store for blockchain parameter discovery
 - **Communication**: HTTPS to backend API
 - **Platform**: Agentverse (hosted agents)
 - **Integration**: ASI:One chat interface
@@ -242,7 +291,9 @@ Sui AI Assistant/
 │       └── test-swap.ts              # Swap functionality
 │
 ├── agent/                            # Python Fetch.ai agent
-│   └── main.py                       # Agent implementation
+│   ├── agent_agentverse.py           # Main agent (Agentverse compatible)
+│   └── knowledge/
+│       └── metta_kg.py               # MeTTa-inspired knowledge graph
 │
 └── README.md                         # This file
 ```
@@ -276,6 +327,167 @@ Sui AI Assistant/
 - `inputSchema` - Required parameters (JSON schema)
 - `embedding` - Vector embedding for semantic search
 - `supportingTools` - Required helper functions
+
+---
+
+## 🧠 MeTTa Knowledge Graph Integration
+
+### Overview
+
+The MeTTa-inspired knowledge graph is a core component demonstrating ASI Alliance technology integration. It implements SingularityNET's MeTTa concepts for AI reasoning, providing blockchain parameter discovery without hardcoding addresses.
+
+### Architecture
+
+**Triple-Store Pattern**: Knowledge is represented as (subject, predicate, object) tuples:
+
+```python
+# Example triples from knowledge/metta_kg.py:
+("SUI", "coin_type", "0x2::sui::SUI")
+("SUI", "decimals", "9")
+("USDC", "coin_type", "0x0588cff9a50e0eaf4cd50d337c1a36570bc1517793fd3303e1513e8ad4d2aa96::usdc::USDC")
+("USDC", "decimals", "6")
+("Cetus", "supports_pair", "SUI/USDC")
+("Cetus", "liquidity_SUI/USDC", "high")
+```
+
+**Semantic Queries**: Pattern matching with wildcards for knowledge retrieval:
+
+```python
+# Query all facts about SUI
+kg.query("SUI", None, None)
+
+# Query all DEXes supporting SUI/USDC
+kg.query(None, "supports_pair", "SUI/USDC")
+
+# Get SUI's decimals
+kg.get_property("SUI", "decimals")  # Returns "9"
+```
+
+**Reasoning Engine**: Infers best DEX for token pairs based on liquidity and risk:
+
+```python
+# Infer best DEX for SUI → USDC
+kg.infer_best_dex("SUI", "USDC")  # Returns "Cetus" with reasoning
+```
+
+### Query Functions
+
+```python
+from knowledge.metta_kg import query_knowledge
+
+# Get complete coin information
+coin_info = query_knowledge("coin_info", coin_symbol="SUI")
+# Returns: {
+#     "symbol": "SUI",
+#     "address": "0x2::sui::SUI",
+#     "coinType": "0x2::sui::SUI",
+#     "decimals": 9
+# }
+
+# Get complete swap parameters
+swap_params = query_knowledge("swap_params", coin_in="SUI", coin_out="USDC")
+# Returns: {
+#     "tokenFrom": {...},  # SUI info
+#     "tokenTo": {...},    # USDC info
+#     "dex": "Cetus",
+#     "globalConfig": "0x9774e359588ead122af1c7e7f64e14ade261cfeecdb5d0eb4a5b3b4c8ab8bd3e",
+#     "network": "testnet"
+# }
+
+# Get gas estimate
+gas_estimate = query_knowledge("gas_estimate", operation="swap")
+# Returns: "0.01" (SUI)
+```
+
+### Integration Flow
+
+1. **User Request**: "swap 0.01 SUI to USDC"
+2. **LLM Extraction**: Agent extracts from_token="SUI", to_token="USDC", amount=0.01
+3. **Knowledge Graph Query**: `query_knowledge("swap_params", coin_in="SUI", coin_out="USDC")`
+4. **KG Response**: Returns SUI address, USDC address, decimals, Cetus config
+5. **Payload Enhancement**: Agent adds KG data to backend API request
+6. **Backend Processing**: Uses addresses for pool discovery and transaction building
+7. **Transaction Execution**: Swap executed on-chain with correct parameters
+8. **Digest Returned**: Transaction hash sent back to user
+
+### Supported Tokens
+
+Current testnet tokens in knowledge graph:
+
+| Token  | Address | Decimals | Testnet |
+|--------|---------|----------|---------|
+| SUI    | `0x2::sui::SUI` | 9 | ✅ |
+| USDC   | `0x0588cff9...::usdc::USDC` | 6 | ✅ |
+| USDT   | `0x50b3637d...::usdt::USDT` | 6 | ✅ |
+| WAL    | `0x8270feb7...::wal::WAL` | 9 | ✅ |
+| CETUS  | `0xa6f859be...::cetus::CETUS` | 9 | ✅ |
+
+**Tested Pairs**:
+- ✅ SUI ↔ USDC (proven working, high liquidity)
+- ✅ SUI ↔ USDT (high liquidity)
+- ✅ SUI ↔ CETUS (medium liquidity)
+- ⚠️ SUI ↔ WAL (low liquidity, may fail)
+
+### Adding New Tokens
+
+To add support for a new token, edit `knowledge/metta_kg.py`:
+
+```python
+# Step 1: Add token definition
+("NEWTOKEN", "coin_type", "0xADDRESS::module::TYPE"),
+("NEWTOKEN", "decimals", "9"),
+("NEWTOKEN", "address", "0xADDRESS::module::TYPE"),
+("NEWTOKEN", "is_type", "coin"),
+
+# Step 2: Add Cetus support
+("Cetus", "supports_token", "NEWTOKEN"),
+("Cetus", "supports_pair", "SUI/NEWTOKEN"),
+("Cetus", "liquidity_SUI/NEWTOKEN", "medium"),
+
+# Step 3: Test the swap
+python test_sui_newtoken_swap.py
+```
+
+### Swap Limitations
+
+Users should be aware of these constraints:
+
+- **Token Support**: Limited to 5 tokens (extensible)
+- **Pool Availability**: Token pair must have active pool on Cetus testnet
+- **Liquidity**: Low liquidity pools may fail with MoveAbort errors
+- **Minimum Amount**: Small amounts (< 0.001 SUI) may fail; recommend 0.01+ SUI
+- **Best Pairs**: SUI↔USDC and SUI↔USDT have highest success rate
+
+The agent's system prompt includes these warnings and will guide users to working pairs if swaps fail.
+
+### Testing
+
+```bash
+# Check supported tokens
+python check_supported_tokens.py
+
+# Test SUI → USDC swap (proven working)
+python test_sui_usdc_swap.py
+
+# Test knowledge graph queries
+python test_enhanced_kg.py
+
+# Test swap payload generation
+python test_swap_payload.py
+
+# Full end-to-end test (requires funded wallet)
+python test_real_swap_e2e.py
+```
+
+### Proven Results
+
+**Live Testnet Transaction**:
+- Swap: 0.01 SUI → USDC
+- Transaction Digest: `HWS5PzEBdBPTCiogaAr7ZZsopL5BTdmaDjtJDRPzWnAX`
+- Explorer: https://suiscan.xyz/testnet/tx/HWS5PzEBdBPTCiogaAr7ZZsopL5BTdmaDjtJDRPzWnAX
+- Status: ✅ Success
+
+This demonstrates the knowledge graph successfully providing real blockchain parameters for production swap execution.
 
 ---
 
@@ -517,10 +729,12 @@ MIT License - see LICENSE file for details
 **Category**: AI Agents × Blockchain Integration
 
 **Key Innovations:**
-1. **Multi-User Non-custodial Architecture** - Approach for agent wallets
-2. **Semantic PTB Registry** - AI-powered transaction template matching
-3. **Gas Abstraction** - Zero friction for AI agent users
-4. **Production Ready** - Live testnet deployment with full test coverage
+1. **Multi-User Custodial Architecture** - Novel approach for agent wallets with deterministic deposit addresses
+2. **MeTTa Knowledge Graph Integration** - SingularityNET's MeTTa concepts for blockchain parameter discovery
+3. **Semantic PTB Registry** - AI-powered transaction template matching with vector embeddings
+4. **Gas Abstraction** - Zero friction for AI agent users
+5. **ASI Alliance Tech Stack** - Fetch.ai uAgents + MeTTa reasoning + ASI1 AI model
+6. **Production Ready** - Live testnet with proven swap execution (tx: HWS5Pz...)
 
 **Live Demo:**
 - Agent Address: `agent1qfn954mwxwcr54g0qdd3f3gypxfhc2kqdqj5pkjx22zpcutr2p7sqzdj2rm`
