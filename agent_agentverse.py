@@ -17,7 +17,7 @@ from typing import Dict, Any, Optional
 from datetime import datetime, timezone
 from uuid import uuid4
 
-from anthropic import Anthropic
+from openai import OpenAI
 from uagents import Agent, Context, Protocol
 from uagents_core.contrib.protocols.chat import (
     chat_protocol_spec,
@@ -44,11 +44,17 @@ AGENT_MAILBOX = os.getenv("SUIVISOR_MAILBOX", None)
 BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:3000")
 BACKEND_API_KEY = os.getenv("BACKEND_API_KEY")  # API key for backend authentication
 CMC_API_KEY = os.getenv("COINMARKETCAP_API_KEY")
-ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
+ASI_ONE_API_KEY = os.getenv("ASI_ONE_API_KEY")  # ASI1 API key
 X_BEARER_TOKEN = os.getenv("X_BEARER_TOKEN")  # Twitter/X Bearer token for API v2 (optional)
 
-# Anthropic client
-anthropic_client = Anthropic(api_key=ANTHROPIC_API_KEY) if ANTHROPIC_API_KEY else None
+# ASI1 client (OpenAI-compatible)
+ai_client = OpenAI(
+    api_key=ASI_ONE_API_KEY,
+    base_url="https://api.asi1.ai/v1"
+) if ASI_ONE_API_KEY else None
+
+# Use asi1-mini model (128K context, ideal for everyday agent workflows)
+AI_MODEL = "asi1-mini"
 
 # Helper function to get headers with API key
 def get_backend_headers():
@@ -109,7 +115,7 @@ print(f"Address: {agent.address}")
 print(f"Port: {AGENT_PORT}")
 print(f"Mailbox: {AGENT_MAILBOX or 'Local mode'}")
 print(f"Backend: {BACKEND_URL}")
-print(f"AI: {'Anthropic Claude' if anthropic_client else 'Regex fallback'}")
+print(f"AI: {'ASI1 Mini' if ai_client else 'Regex fallback'}")
 print(f"{'='*60}\n")
 
 # ============================================================================
@@ -144,14 +150,15 @@ def create_acknowledgement(msg_id: str) -> ChatAcknowledgement:
 
 def parse_intent_with_llm(query: str) -> dict:
     """Parse user intent using Anthropic Claude or regex fallback"""
-    if not anthropic_client:
+    if not ai_client:
         return parse_intent_regex(query)
 
     try:
-        response = anthropic_client.messages.create(
-            model="claude-haiku-4-5-20251001",
+        response = ai_client.chat.completions.create(
+            model=AI_MODEL,
             max_tokens=1024,
-            system="""You are a conversational DeFi intent parser for Sui AI Assistant - a custodial wallet system.
+            messages=[
+                {"role": "system", "content": """You are a conversational DeFi intent parser for Sui AI Assistant - a custodial wallet system.
 
 CONTEXT: This is a custodial wallet. Each user has a unique deposit address. Users deposit SUI to that address, then use their balance for swaps, NFTs, etc.
 
@@ -189,11 +196,12 @@ Respond ONLY with JSON:
   "action": "action_name",
   "parameters": {...},
   "confidence": 0.0-1.0
-}""",
-            messages=[{"role": "user", "content": f"Parse this query: {query}"}]
+}"""},
+                {"role": "user", "content": f"Parse this query: {query}"}
+            ]
         )
 
-        text = response.content[0].text
+        text = response.choices[0].message.content
         json_match = re.search(r'\{.*\}', text, re.DOTALL)
         if json_match:
             return json.loads(json_match.group())
@@ -264,7 +272,7 @@ def parse_intent_regex(query: str) -> dict:
 def generate_natural_response(ctx: Context, user_query: str, action: str, result_data: dict) -> str:
     """Generate natural response using LLM based on action result"""
 
-    if not anthropic_client:
+    if not ai_client:
         # Fallback without LLM - return simple formatted response
         if not result_data.get("success"):
             return f"❌ {result_data.get('error', 'An error occurred')}"
@@ -292,6 +300,13 @@ FORMATTING RULES:
 - For lists or multiple data points, put each on its own line
 - Example: "Price: $2.71\n\n24h Change: +7.44%\n24h Volume: $859M\nMarket Cap: $9.84B"
 
+SPECIAL: Multi-Operation Atomic Transactions
+- If result has "mode": "multi-operation", this was an atomic transaction with multiple operations
+- Celebrate the atomicity: "✅ Atomic transaction successful!"
+- List what operations were executed (use "effects" or "operations" fields)
+- Example: "✅ Atomic transaction successful! Executed 2 operations: transferred 0.1 SUI to 0x78df...b8ed and minted NFT 'cat'"
+- Always show the transaction hash with explorer link
+
 IMPORTANT CONTEXT:
 - This is a custodial wallet system
 - Users have unique deposit addresses
@@ -305,14 +320,16 @@ Action: {action}
 Result: {json.dumps(result_data, indent=2)}
 """
 
-        response = anthropic_client.messages.create(
-            model="claude-haiku-4-5-20251001",
+        response = ai_client.chat.completions.create(
+            model=AI_MODEL,
             max_tokens=512,
-            system=system_context,
-            messages=[{"role": "user", "content": result_context}]
+            messages=[
+                {"role": "system", "content": system_context},
+                {"role": "user", "content": result_context}
+            ]
         )
 
-        return response.content[0].text
+        return response.choices[0].message.content
 
     except Exception as e:
         ctx.logger.error(f"❌ LLM response generation failed: {e}")
@@ -973,24 +990,26 @@ KEY FEATURES:
 - "research memecoins" - Category-based market research
 """
 
-    if not anthropic_client:
+    if not ai_client:
         # Fallback if no LLM available
         return "👋 Hi! I'm Sui AI Assistant, your AI-powered wallet for Sui blockchain!\n\n🏦 YOUR DEPOSIT ACCOUNT:\nInstead of managing private keys, you get a unique deposit address. Just send SUI there, and I handle everything!\n\nHOW TO START:\n1. Ask for your 'deposit address'\n2. Send SUI tokens there\n3. Use commands: 'check balance', 'mint NFT', etc.\n\n✨ KEY FEATURES:\n💰 Balance & Deposits\n🔄 Token Swaps (⚠️ experimental - may need manual params)\n🎨 NFT Operations\n💵 Crypto Prices\n📰 Crypto News\n🔬 Market Research\n\nWhat would you like to do?"
 
     try:
-        response = anthropic_client.messages.create(
-            model="claude-haiku-4-5-20251001",
+        response = ai_client.chat.completions.create(
+            model=AI_MODEL,
             max_tokens=512,
-            system=f"""You are Sui AI Assistant, a friendly AI assistant for Sui blockchain DeFi operations.
+            messages=[
+                {"role": "system", "content": f"""You are Sui AI Assistant, a friendly AI assistant for Sui blockchain DeFi operations.
 
 {app_description}
 
 Respond to user queries naturally and helpfully. Use emojis sparingly. Be concise but informative.
-Format your response in a conversational way that matches the user's query tone.""",
-            messages=[{"role": "user", "content": user_query}]
+Format your response in a conversational way that matches the user's query tone."""},
+                {"role": "user", "content": user_query}
+            ]
         )
 
-        return response.content[0].text
+        return response.choices[0].message.content
     except Exception as e:
         ctx.logger.error(f"❌ LLM help generation failed: {e}")
         # Fallback message
@@ -1023,15 +1042,20 @@ async def handle_atomic_transaction(ctx: Context, user_address: str, intent: str
                     "transaction_hash": tx_hash,
                     "explorer_url": f"https://suiscan.xyz/testnet/tx/{tx_hash}",
                     "template": template_name,
+                    "mode": mode
                 }
 
                 # Add multi-op specific info if available
                 if mode == "multi-operation":
                     result["operation_count"] = data.get("operationCount", 0)
                     result["operations"] = data.get("operations", [])
-                    result["effects"] = data.get("effects", [])
-
-                ctx.logger.info(f"✅ Atomic transaction successful: {tx_hash}")
+                    result["effects"] = data.get("effects")  # Effects summary from backend
+                    
+                    # Log multi-op success with details
+                    ctx.logger.info(f"✅ Multi-op atomic transaction successful: {result['operation_count']} operations in tx {tx_hash}")
+                else:
+                    ctx.logger.info(f"✅ Single-op transaction successful: {tx_hash}")
+                
                 return result
             else:
                 error_msg = data.get("error", "Unknown error")
@@ -1055,6 +1079,23 @@ async def handle_atomic_transaction(ctx: Context, user_address: str, intent: str
 # Store conversation history per user (in-memory, limited to last 10 messages)
 # Format: {sender_address: [{"role": "user", "content": "..."}, {"role": "assistant", "content": [...]}]}
 conversation_history: Dict[str, list] = {}
+
+def serialize_tool_calls(tool_calls):
+    """Convert OpenAI tool_calls objects to serializable dictionaries"""
+    if not tool_calls:
+        return None
+
+    return [
+        {
+            "id": tc.id,
+            "type": tc.type,
+            "function": {
+                "name": tc.function.name,
+                "arguments": tc.function.arguments
+            }
+        }
+        for tc in tool_calls
+    ]
 
 def get_conversation_history(sender: str, max_messages: int = 10) -> list:
     """Get conversation history for a sender (last N messages)"""
@@ -1108,7 +1149,7 @@ async def handle_chat_message(ctx: Context, sender: str, msg: ChatMessage):
 
     ctx.logger.info(f"💬 Query: {user_query}")
 
-    if not anthropic_client:
+    if not ai_client:
         await ctx.send(sender, create_text_chat(
             "❌ AI service not configured. Please contact administrator."
         ))
@@ -1264,11 +1305,36 @@ async def handle_chat_message(ctx: Context, sender: str, msg: ChatMessage):
             },
             {
                 "name": "execute_atomic_transaction",
-                "description": "Execute multiple blockchain operations atomically in a single transaction (all succeed or all fail). Use this when user requests multiple operations like 'mint NFT and transfer it', 'transfer SUI twice', or any scenario where operations must happen together. Do NOT use for single operations.",
+                "description": """⚛️ ATOMIC MULTI-OPERATION TRANSACTION - Use this for MULTIPLE operations in ONE transaction.
+
+WHEN TO USE (Multi-Op Scenarios):
+✅ User requests 2+ operations together:
+   - "transfer 0.1 SUI to 0x123... and mint an NFT"
+   - "mint NFT and transfer it to 0x456..."
+   - "transfer 0.5 SUI to Alice and 0.3 SUI to Bob"
+   - "swap SUI to USDC then stake it"
+
+✅ Sequential operations that should be atomic:
+   - Operations connected by "and", "then", "also"
+   - Multiple transfers in one request
+   - Mint + transfer combinations
+   
+❌ DO NOT USE for single operations (use specific tools instead):
+   - Just "check balance" → use check_balance
+   - Just "mint NFT" → use mint_nft
+   - Just "transfer SUI" → Not available as single tool, but if user ONLY wants to transfer (no other ops), you can still use this tool
+
+HOW IT WORKS:
+- Backend uses semantic search to match operations to PTB templates
+- Automatically combines multiple templates into one atomic transaction
+- All operations succeed together or all fail (transaction integrity)
+- Supports: transfers, swaps, NFT minting, staking, and more
+
+IMPORTANT: Pass the FULL user intent as-is. The backend will parse it intelligently.""",
                 "input_schema": {
                     "type": "object",
                     "properties": {
-                        "intent": {"type": "string", "description": "Natural language describing all operations to execute atomically (e.g., 'mint NFT called Art with description My Art and image url.png, then transfer 0.01 SUI to 0x123...')"}
+                        "intent": {"type": "string", "description": "Natural language describing all operations to execute atomically. Include ALL details: amounts, addresses, token names, NFT info, etc. Example: 'transfer 0.1 SUI to 0x78df...b8ed and mint an NFT named cat with description black cat and image url https://example.com/image.jpg'"}
                     },
                     "required": ["intent"]
                 }
@@ -1279,11 +1345,12 @@ async def handle_chat_message(ctx: Context, sender: str, msg: ChatMessage):
         history = get_conversation_history(sender, max_messages=10)
         ctx.logger.info(f"📜 Using {len(history)} previous messages for context")
 
+        # Determine if this is the first message
+        is_first_message = len(history) == 0
+
         # Build deposit address context
         deposit_address_context = ""
         if user_deposit_address:
-            # Only show greeting instruction if this is the FIRST message in conversation
-            is_first_message = len(history) == 0
             
             if is_first_message:
                 deposit_address_context = """
@@ -1333,6 +1400,33 @@ You have tools to help users with:
 📰 Crypto News - Latest updates from X/Twitter
 
 🔬 Market Research - Comprehensive analysis with price + news + sentiment
+
+⚛️ ATOMIC TRANSACTIONS (Multi-Operation):
+- Use execute_atomic_transaction when user requests 2+ operations together
+- Keywords: "and", "then", "also", multiple amounts/addresses in one message
+- Examples that need atomic transactions:
+  • "transfer 0.1 SUI and mint an NFT" → atomic
+  • "mint NFT then transfer it" → atomic
+  • "send SUI to Alice and Bob" → atomic
+- Single operations use specific tools (mint_nft, swap_tokens, etc.)
+
+🧠 TOOL SELECTION DECISION TREE:
+
+1. COUNT THE OPERATIONS in user's request:
+   - "mint NFT" = 1 operation → use mint_nft tool
+   - "check balance" = 1 operation → use check_balance tool
+   - "transfer 0.1 SUI AND mint NFT" = 2 operations → use execute_atomic_transaction
+   - "send SUI to Alice AND Bob" = 2 operations → use execute_atomic_transaction
+
+2. DETECT MULTI-OP KEYWORDS:
+   - "and", "then", "also", "plus", "as well"
+   - Multiple addresses/amounts in one message
+   - Sequential actions ("do X then Y")
+
+3. RULE OF THUMB:
+   - If user wants ONE thing done → use specific tool (mint_nft, swap_tokens, etc.)
+   - If user wants MULTIPLE things done → use execute_atomic_transaction
+   - When in doubt: Count operations. 2+ = atomic transaction.
 
 IMPORTANT PRINCIPLES:
 - Be proactive: When users ask about investing/trading/buying, immediately use research_market to gather data
@@ -1437,29 +1531,42 @@ NOT: "**RATIO** − showingactivitywithareported2.5xmoverecently(from238kto$514k
         else:
             ctx.logger.warning(f"⚠️ Deposit address issue (address: {user_deposit_address}, first_msg: {is_first_message})")
 
-        # Build messages array: history + current query
-        messages = history + [{"role": "user", "content": user_query}]
+        # Build messages array: system + history + current query (OpenAI format)
+        messages = [{"role": "system", "content": system_prompt}] + history + [{"role": "user", "content": user_query}]
 
-        # Call Claude with tools
-        response = anthropic_client.messages.create(
-            model="claude-haiku-4-5-20251001",
+        # Convert Anthropic tool format to OpenAI format
+        openai_tools = [{
+            "type": "function",
+            "function": {
+                "name": tool["name"],
+                "description": tool["description"],
+                "parameters": tool["input_schema"]
+            }
+        } for tool in tools]
+
+        # Call ASI1 with tools
+        response = ai_client.chat.completions.create(
+            model=AI_MODEL,
             max_tokens=2048,
-            system=system_prompt,
-            tools=tools,
+            tools=openai_tools,
             messages=messages
         )
 
-        # Process response and execute tools
+        # Process response and execute tools (OpenAI format)
         response_text = ""
         tool_results = []
+        message = response.choices[0].message
 
-        for content_block in response.content:
-            if content_block.type == "text":
-                response_text = content_block.text
-            elif content_block.type == "tool_use":
-                tool_name = content_block.name
-                tool_input = content_block.input
-                tool_id = content_block.id
+        # Get text response if available
+        if message.content:
+            response_text = message.content
+
+        # Process tool calls if any
+        if message.tool_calls:
+            for tool_call in message.tool_calls:
+                tool_name = tool_call.function.name
+                tool_input = json.loads(tool_call.function.arguments)
+                tool_id = tool_call.id
 
                 ctx.logger.info(f"🔧 Tool: {tool_name}")
 
@@ -1515,37 +1622,42 @@ NOT: "**RATIO** − showingactivitywithareported2.5xmoverecently(from238kto$514k
                         "error": str(e)
                     }
 
+                # OpenAI tool result format
                 tool_results.append({
-                    "type": "tool_result",
-                    "tool_use_id": tool_id,
+                    "role": "tool",
+                    "tool_call_id": tool_id,
                     "content": json.dumps(tool_result)
                 })
 
-        # If tools were called, get final response from Claude
+        # If tools were called, get final response from ASI1
         if tool_results:
-            final_response = anthropic_client.messages.create(
-                model="claude-haiku-4-5-20251001",
+            # Build messages: system + history + user + assistant (with tool calls) + tool results
+            follow_up_messages = [{"role": "system", "content": system_prompt}] + history + [
+                {"role": "user", "content": user_query},
+                {"role": "assistant", "content": message.content, "tool_calls": serialize_tool_calls(message.tool_calls)}
+            ] + tool_results
+
+            final_response = ai_client.chat.completions.create(
+                model=AI_MODEL,
                 max_tokens=2048,
-                system=system_prompt,
-                tools=tools,
-                messages=history + [
-                    {"role": "user", "content": user_query},
-                    {"role": "assistant", "content": response.content},
-                    {"role": "user", "content": tool_results}
-                ]
+                tools=openai_tools,
+                messages=follow_up_messages
             )
 
             # Extract text from final response
-            for content_block in final_response.content:
-                if content_block.type == "text":
-                    response_text = content_block.text
-                    break
+            final_message = final_response.choices[0].message
+            if final_message.content:
+                response_text = final_message.content
 
             # Save conversation history (with tool call and final response)
-            add_to_conversation_history(sender, user_query, final_response.content)
+            # Store the assistant's final response
+            add_to_conversation_history(sender, user_query, [
+                {"role": "assistant", "content": message.content, "tool_calls": serialize_tool_calls(message.tool_calls)},
+                {"role": "assistant", "content": final_message.content}
+            ])
         else:
             # Save conversation history (direct response without tools)
-            add_to_conversation_history(sender, user_query, response.content)
+            add_to_conversation_history(sender, user_query, [{"role": "assistant", "content": message.content}])
 
         # Send response
         if response_text:
